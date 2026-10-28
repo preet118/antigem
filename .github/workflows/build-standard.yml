@@ -26,9 +26,6 @@ jobs:
         with:
           go-version-file: agy_ide_bridge/go.mod
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install SDK 36
         run: |
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
