@@ -8,15 +8,14 @@ permissions:
   contents: read
 
 jobs:
-  build-standard:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
 
     steps:
-      - name: Checkout repository
+      - name: Download source
         uses: actions/checkout@v4
 
-      - name: Setup Java 21
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -30,30 +29,24 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 36
+      - name: Install SDK 36
         run: |
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build Standard Debug APK
+      - name: Build APK
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleStandardDebug --no-daemon --stacktrace
+          ./gradlew :app:assembleStandardDebug --no-daemon
 
-      - name: Prepare files
+      - name: Prepare APK
         run: |
-          mkdir -p dist
-          cp app/build/outputs/apk/standard/debug/*.apk dist/
-          cp app/src/main/assets/bin/agy_ide_bridge dist/
-          ls -lh dist/
-          sha256sum dist/*
+          mkdir -p output
+          cp app/build/outputs/apk/standard/debug/*.apk output/AntiGem-Standard.apk
+          cp app/src/main/assets/bin/agy_ide_bridge output/
 
-      - name: Upload APK and Bridge
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: AntiGem-Standard-Android
-          path: dist/*
+          path: output/*
           if-no-files-found: error
-          retention-days: 7
