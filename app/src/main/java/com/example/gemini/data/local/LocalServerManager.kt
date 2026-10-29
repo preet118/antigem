@@ -209,7 +209,7 @@ object LocalServerManager {
         val tzOffset = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000
 
         val agyEnabled = com.example.gemini.domain.model.AgentKind.AGY in com.example.gemini.data.agent.AgentPreferences.enabledSync(context)
-        val binParam = if (agyEnabled && agyCmd.isNotBlank() && java.io.File(agyCmd).isFile) {
+        val binParam = if (agyEnabled && agyCmd.isNotBlank()) {
             " --bin \"$agyCmd\""
         } else {
             ""
