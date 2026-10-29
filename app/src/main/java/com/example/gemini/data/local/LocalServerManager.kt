@@ -294,6 +294,42 @@ object LocalServerManager {
         startServer(context, forceRestart = false)
     }
 
+    // Standard Ubuntu: install the selected official agent CLIs when needed.
+    // Never erase an existing rootfs, and never attempt an unattended OS upgrade.
+    private suspend fun prepareUbuntuAgents(context: Context) {
+        if (LocalEnvironmentManager.isTermuxPackage(context) || !LocalEnvironmentManager.isUbuntuInstalled(context)) return
+        val enabled = com.example.gemini.data.agent.AgentPreferences.enabledSync(context)
+        val agyEnabled = com.example.gemini.domain.model.AgentKind.AGY in enabled
+        val claudeEnabled = com.example.gemini.domain.model.AgentKind.CLAUDE in enabled
+        if (!agyEnabled && !claudeEnabled) return
+        val script = """
+            set -e
+            if ! grep -q '^VERSION_ID="26.04"' /etc/os-release && ! grep -q '^VERSION_ID=26.04' /etc/os-release; then
+                echo "Existing Ubuntu version retained; agent provisioning needs Ubuntu 26.04"
+                exit 0
+            fi
+            if { [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; } ||
+               { [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; }; then
+                if ! command -v curl >/dev/null 2>&1; then
+                    apt-get update -qq
+                    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates procps
+                fi
+            fi
+            if [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; then
+                curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/antigem-agy-install.sh
+                bash /tmp/antigem-agy-install.sh
+                test -x /root/.local/bin/agy
+            fi
+            if [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; then
+                curl -fsSL https://claude.ai/install.sh -o /tmp/antigem-claude-install.sh
+                bash /tmp/antigem-claude-install.sh
+                test -x /root/.local/bin/claude
+            fi
+        """.trimIndent().replace("${agyEnabled}", agyEnabled.toString()).replace("${claudeEnabled}", claudeEnabled.toString())
+        val result = LocalEnvironmentManager.executeCommand(script, context = context, timeoutSeconds = 1200)
+        if (result.exitCode != 0) Log.e(TAG, "Ubuntu agent provisioning failed: ${result.output.takeLast(1500)}")
+    }
+
     fun startServer(context: Context, forceRestart: Boolean = false) {
         if (hasServerScript(context)) {
             hasInitialAutoStarted = true
@@ -320,6 +356,7 @@ object LocalServerManager {
 
         val appContext = context.applicationContext
         ensureBridgeBinary(appContext)
+        prepareUbuntuAgents(appContext)
         // the bridge starts Claude Code through the app's launcher (--claude-bin)
         LocalEnvironmentManager.ensureGlibcEnvironment(appContext)
         LocalEnvironmentManager.ensureClaudeWrapper(appContext)
