@@ -66,10 +66,10 @@ object LocalEnvironmentManager {
     const val HARDCODED_ROOTFS_ASSET = "bootrapz_2026-10-04.zip"
     const val HARDCODED_ROOTFS_SIZE_BYTES = 350 * 1024 * 1024L
 
-    const val UBUNTU_ROOTFS_URL = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz"
-    const val UBUNTU_ROOTFS_TAG = "24.04.5"
-    const val UBUNTU_ROOTFS_ASSET = "ubuntu-base-24.04.5-base-arm64.tar.gz"
-    const val UBUNTU_ROOTFS_SIZE_BYTES = 29 * 1024 * 1024L
+    const val UBUNTU_ROOTFS_URL = "https://github.com/preet118/antigem/releases/download/antigem-ubuntu24-agents-v1/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+    const val UBUNTU_ROOTFS_TAG = "antigem-ubuntu24-agents-v1"
+    const val UBUNTU_ROOTFS_ASSET = "AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+    const val UBUNTU_ROOTFS_SIZE_BYTES = 176853266L
 
     private const val NOTIFICATION_CHANNEL_ID = "antigem_bootstrap_install"
     private const val NOTIFICATION_ID = 4096
