@@ -304,10 +304,11 @@ object LocalServerManager {
         if (!agyEnabled && !claudeEnabled) return
         val script = """
             set -e
-            if ! grep -q '^VERSION_ID="26.04"' /etc/os-release && ! grep -q '^VERSION_ID=26.04' /etc/os-release; then
-                echo "Existing Ubuntu version retained; agent provisioning needs Ubuntu 26.04"
+            if ! grep -q '^VERSION_ID="24.04"' /etc/os-release && ! grep -q '^VERSION_ID=24.04' /etc/os-release; then
+                echo "Existing Ubuntu version retained; agent provisioning expects Ubuntu 24.04"
                 exit 0
             fi
+            export PATH="/root/.local/bin:$PATH"
             if { [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; } ||
                { [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; }; then
                 if ! command -v curl >/dev/null 2>&1; then
