@@ -244,7 +244,8 @@ class LocalPtySession(
                         "DEBIAN_FRONTEND=noninteractive",
                         "COLUMNS=$safeCols",
                         "LINES=$safeRows",
-                        // "PROOT_NO_SECCOMP=1",
+                        // Prevent Android seccomp interception from breaking PRoot child startup.
+                        "PROOT_NO_SECCOMP=1",
                         "PROOT_LOADER=${LocalEnvironmentManager.getProotLoaderPath(context)}",
                         "PROOT_TMP_DIR=${prootTmpDir.absolutePath}",
                         "LD_LIBRARY_PATH=${context.filesDir.absolutePath}/lib:${context.filesDir.absolutePath}/bin"
