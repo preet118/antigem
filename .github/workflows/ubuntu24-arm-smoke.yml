@@ -13,10 +13,9 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
     steps:
-      - name: Install PRoot
+      - name: Verify ARM64 host architecture
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq proot
+          test "$(uname -m)" = "aarch64"
       - name: Fetch and verify Ubuntu Base 24.04 ARM64
         run: |
           set -e
@@ -26,10 +25,10 @@ jobs:
           printf "nameserver 1.1.1.1\n" | sudo tee /tmp/guest/etc/resolv.conf
           test -x /tmp/guest/usr/bin/env
           test -x /tmp/guest/usr/bin/bash
-      - name: Exercise Ubuntu ARM64 in PRoot
+      - name: Exercise Ubuntu ARM64 in chroot
         run: |
           set -e
-          proot -0 -r /tmp/guest -b /dev -b /proc -b /sys -w /root /usr/bin/env HOME=/root USER=root DEBIAN_FRONTEND=noninteractive /bin/bash -ec '
+          sudo chroot /tmp/guest /usr/bin/env HOME=/root USER=root DEBIAN_FRONTEND=noninteractive /bin/bash -ec '
             set -e
             grep -F "24.04" /etc/os-release
             cat /etc/os-release | head -3
@@ -46,5 +45,5 @@ jobs:
             bash /tmp/claude-install.sh
             test -x /root/.local/bin/claude
             /root/.local/bin/claude --version
-            echo "Ubuntu24 ARM64 rootfs and both CLI installers: OK"
+            echo "Ubuntu24 ARM64 rootfs and both CLI installers: OK (not Android PRoot)"
           '
