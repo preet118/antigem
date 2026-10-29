@@ -30,7 +30,11 @@ jobs:
           sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root USER=root DEBIAN_FRONTEND=noninteractive /bin/bash -ec '
             set -euo pipefail
             apt-get update -qq </dev/null
-            apt-get -o Dpkg::Use-Pty=0 install -y -qq curl ca-certificates procps nodejs npm </dev/null
+            apt-get -o Dpkg::Use-Pty=0 install -y -qq curl ca-certificates procps xz-utils </dev/null
+            curl -fsSL https://nodejs.org/dist/v22.16.0/node-v22.16.0-linux-arm64.tar.xz -o /tmp/node-arm64.tar.xz
+            tar -xJf /tmp/node-arm64.tar.xz -C /usr/local --strip-components=1
+            node --version
+            npm --version
             mkdir -p /root/.local/bin
             curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/agy-install.sh
             bash /tmp/agy-install.sh
@@ -40,7 +44,7 @@ jobs:
             test -x /root/.local/bin/claude
             /root/.local/bin/claude --version
             apt-get clean
-            rm -rf /var/lib/apt/lists/* /root/.npm/_logs /tmp/agy-install.sh /root/.cache
+            rm -rf /var/lib/apt/lists/* /root/.npm /tmp/agy-install.sh /tmp/node-arm64.tar.xz /root/.cache
             echo "Preconfigured Ubuntu 24 ARM64: AGY and Claude verified"
           '
       - name: Remove CI-only files and package rootfs archive
