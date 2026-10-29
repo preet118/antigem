@@ -66,9 +66,9 @@ object LocalEnvironmentManager {
     const val HARDCODED_ROOTFS_ASSET = "bootrapz_2026-10-04.zip"
     const val HARDCODED_ROOTFS_SIZE_BYTES = 350 * 1024 * 1024L
 
-    const val UBUNTU_ROOTFS_URL = "https://github.com/termux/proot-distro/releases/download/v4.30.1/ubuntu-questing-aarch64-pd-v4.30.1.tar.xz"
-    const val UBUNTU_ROOTFS_TAG = "v4.30.1"
-    const val UBUNTU_ROOTFS_ASSET = "ubuntu-questing-aarch64-pd-v4.30.1.tar.xz"
+    const val UBUNTU_ROOTFS_URL = "https://cdimage.ubuntu.com/ubuntu-base/releases/26.04/release/ubuntu-base-26.04.1-base-arm64.tar.gz"
+    const val UBUNTU_ROOTFS_TAG = "26.04.1"
+    const val UBUNTU_ROOTFS_ASSET = "ubuntu-base-26.04.1-base-arm64.tar.gz"
     const val UBUNTU_ROOTFS_SIZE_BYTES = 35 * 1024 * 1024L
 
     private const val NOTIFICATION_CHANNEL_ID = "antigem_bootstrap_install"
