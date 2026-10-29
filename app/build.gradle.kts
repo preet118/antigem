@@ -225,7 +225,9 @@ val buildAgyIdeBridge = tasks.register<Exec>("buildAgyIdeBridge") {
   }
 
   workingDir = bridgeSourceDir.asFile
-  environment("GOOS", "android")
+  // Standard runs its bridge inside the Ubuntu PRoot (glibc); Termux uses Android/Bionic.
+  val standardFlavor = gradle.startParameter.taskNames.any { it.contains("Standard", ignoreCase = true) }
+  environment("GOOS", if (standardFlavor) "linux" else "android")
   environment("GOARCH", "arm64")
   environment("CGO_ENABLED", "0")
   commandLine("go", "build", "-ldflags=-s -w", "-o", binDir.file("agy_ide_bridge").asFile.absolutePath, "main.go")

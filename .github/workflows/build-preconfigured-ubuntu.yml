@@ -1,0 +1,80 @@
+name: Build Preconfigured Ubuntu 24 ARM64
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/ubuntu-26-claude-antigravity
+    paths:
+      - .github/workflows/build-preconfigured-ubuntu.yml
+permissions:
+  contents: write
+jobs:
+  rootfs:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - name: Download and extract official Ubuntu Base
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz -o /tmp/ubuntu-base.tar.gz
+          sudo mkdir -p /tmp/antigem-ubuntu-root
+          sudo tar -xzf /tmp/ubuntu-base.tar.gz -C /tmp/antigem-ubuntu-root
+          sudo chmod 1777 /tmp/antigem-ubuntu-root/tmp
+          printf "nameserver 1.1.1.1\n" | sudo tee /tmp/antigem-ubuntu-root/etc/resolv.conf
+          for n in null random urandom tty; do sudo cp -a "/dev/$n" "/tmp/antigem-ubuntu-root/dev/$n"; done
+      - name: Preinstall Linux requirements, AGY and compatible Claude Code
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root USER=root DEBIAN_FRONTEND=noninteractive /bin/bash -ec '
+            set -euo pipefail
+            apt-get update -qq </dev/null
+            apt-get -o Dpkg::Use-Pty=0 install -y -qq curl ca-certificates procps xz-utils </dev/null
+            curl -fsSL https://nodejs.org/dist/v22.16.0/node-v22.16.0-linux-arm64.tar.xz -o /tmp/node-arm64.tar.xz
+            tar -xJf /tmp/node-arm64.tar.xz -C /usr/local --strip-components=1
+            node --version
+            npm --version
+            mkdir -p /root/.local/bin
+            curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/agy-install.sh
+            bash /tmp/agy-install.sh
+            test -x /root/.local/bin/agy
+            /root/.local/bin/agy --version
+            npm install -g --prefix /root/.local @anthropic-ai/claude-code@2.1.112
+            test -x /root/.local/bin/claude
+            /root/.local/bin/claude --version
+            apt-get clean
+            rm -rf /var/lib/apt/lists/* /root/.npm /tmp/agy-install.sh /tmp/node-arm64.tar.xz /root/.cache
+            echo "Preconfigured Ubuntu 24 ARM64: AGY and Claude verified"
+          '
+      - name: Remove CI-only files and package rootfs archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -f /tmp/antigem-ubuntu-root/dev/null /tmp/antigem-ubuntu-root/dev/random /tmp/antigem-ubuntu-root/dev/urandom /tmp/antigem-ubuntu-root/dev/tty
+          sudo rm -f /tmp/antigem-ubuntu-root/etc/resolv.conf
+          sudo find /tmp/antigem-ubuntu-root -type s -delete
+          sudo tar -C /tmp/antigem-ubuntu-root -czf /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz .
+          sha256sum /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz
+          ls -lh /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz
+      - name: Upload preconfigured rootfs
+        uses: actions/upload-artifact@v4
+        with:
+          name: AntiGem-Ubuntu24-ARM64-Preconfigured
+          path: /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish downloadable agent-ready rootfs to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="antigem-ubuntu24-agents-v1"
+          asset="/tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "AntiGem Ubuntu 24 ARM64 preconfigured rootfs (test)" --notes "Ubuntu 24.04.5 LTS ARM64 with official Antigravity CLI and Claude Code 2.1.112 via npm. Created without user files, credentials or projects. GitHub ARM64 chroot-tested; actual Android PRoot/AGY Hub compatibility remains unverified." --prerelease
+          fi

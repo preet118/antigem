@@ -1,0 +1,55 @@
+name: Ubuntu 24 ARM64 Agent Smoke Test
+on:
+  push:
+    branches:
+      - fix/ubuntu-26-claude-antigravity
+    paths:
+      - .github/workflows/ubuntu24-arm-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    steps:
+      - name: Verify ARM64 host architecture
+        run: |
+          test "$(uname -m)" = "aarch64"
+      - name: Fetch and verify Ubuntu Base 24.04 ARM64
+        run: |
+          set -e
+          curl -fL --retry 2 https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz -o /tmp/base.tar.gz
+          mkdir -p /tmp/guest
+          tar -xzf /tmp/base.tar.gz -C /tmp/guest
+          printf "nameserver 1.1.1.1\n" | sudo tee /tmp/guest/etc/resolv.conf
+          test -x /tmp/guest/usr/bin/env
+          test -x /tmp/guest/usr/bin/bash
+          sudo chmod 1777 /tmp/guest/tmp
+          sudo cp -a /dev/null /tmp/guest/dev/null
+          sudo cp -a /dev/urandom /tmp/guest/dev/urandom
+          sudo cp -a /dev/random /tmp/guest/dev/random
+          sudo cp -a /dev/tty /tmp/guest/dev/tty
+      - name: Exercise Ubuntu ARM64 in chroot
+        run: |
+          set -e
+          sudo chroot /tmp/guest /usr/bin/env HOME=/root USER=root DEBIAN_FRONTEND=noninteractive /bin/bash -ec '
+            set -e
+            grep -F "24.04" /etc/os-release
+            cat /etc/os-release | head -3
+            ls /usr/bin/env
+            mkdir -p /root/.local/bin
+            apt-get update -qq </dev/null
+            apt-get -o Dpkg::Use-Pty=0 install -y -qq curl ca-certificates procps </dev/null
+            curl --version | head -1
+            curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/agy-install.sh
+            bash /tmp/agy-install.sh
+            test -x /root/.local/bin/agy
+            /root/.local/bin/agy --version
+            # Compatibility fallback: last Node-based Claude Code release, avoids Bun-compiled ARM64 crash.
+            DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 install -y -qq nodejs npm </dev/null
+            npm install -g --prefix /root/.local @anthropic-ai/claude-code@2.1.112
+            test -x /root/.local/bin/claude
+            /root/.local/bin/claude --version
+            echo "Ubuntu24 ARM64 rootfs and both CLI installers: OK (not Android PRoot)"
+          '

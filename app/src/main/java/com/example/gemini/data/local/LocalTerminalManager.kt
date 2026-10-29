@@ -244,7 +244,7 @@ class LocalPtySession(
                         "DEBIAN_FRONTEND=noninteractive",
                         "COLUMNS=$safeCols",
                         "LINES=$safeRows",
-                        // "PROOT_NO_SECCOMP=1",
+                        // Keep PRoot's default syscall mode; do not force NO_SECCOMP.
                         "PROOT_LOADER=${LocalEnvironmentManager.getProotLoaderPath(context)}",
                         "PROOT_TMP_DIR=${prootTmpDir.absolutePath}",
                         "LD_LIBRARY_PATH=${context.filesDir.absolutePath}/lib:${context.filesDir.absolutePath}/bin"

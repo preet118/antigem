@@ -1,0 +1,36 @@
+name: Diagnose Ubuntu 24.04 ARM64 Rootfs
+on:
+  push:
+    branches:
+      - fix/ubuntu-26-claude-antigravity
+    paths:
+      - .github/workflows/diagnose-ubuntu-rootfs.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect archive and ARM64 loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz"
+          curl -fL --retry 3 "$url" -o /tmp/ubuntu24.tar.gz
+          echo "Compressed bytes: $(wc -c </tmp/ubuntu24.tar.gz)"
+          tar -tzf /tmp/ubuntu24.tar.gz | grep -E '(^|/)(env$|bash$|ld-linux-aarch64.so.1$|libc.so.6$|os-release$|usr$|lib$|lib64$)' | head -80 || true
+          mkdir -p /tmp/ubuntu
+          tar -xzf /tmp/ubuntu24.tar.gz -C /tmp/ubuntu
+          echo '=== top-level symlinks ==='
+          ls -ld /tmp/ubuntu/bin /tmp/ubuntu/lib /tmp/ubuntu/lib64 /tmp/ubuntu/usr/bin/env /tmp/ubuntu/usr/bin/bash || true
+          echo '=== loader candidates ==='
+          find /tmp/ubuntu -name 'ld-linux-aarch64.so.1' -o -name 'libc.so.6' | head -40
+          echo '=== ELF interpreter ==='
+          readelf -l /tmp/ubuntu/usr/bin/env | grep -E -A1 'INTERP|interpreter' || true
+          echo '=== loader links ==='
+          ls -l /tmp/ubuntu/usr/lib/ld-linux-aarch64.so.1 /tmp/ubuntu/lib/ld-linux-aarch64.so.1 /tmp/ubuntu/lib64/ld-linux-aarch64.so.1 /tmp/ubuntu/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 || true
+          echo '=== Ubuntu version ==='
+          cat /tmp/ubuntu/etc/os-release
+          echo '=== hardlinks ==='
+          tar -tvzf /tmp/ubuntu24.tar.gz | grep ' link to ' | head -35 || true

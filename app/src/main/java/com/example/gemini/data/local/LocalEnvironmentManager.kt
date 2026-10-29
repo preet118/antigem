@@ -66,10 +66,10 @@ object LocalEnvironmentManager {
     const val HARDCODED_ROOTFS_ASSET = "bootrapz_2026-10-04.zip"
     const val HARDCODED_ROOTFS_SIZE_BYTES = 350 * 1024 * 1024L
 
-    const val UBUNTU_ROOTFS_URL = "https://github.com/termux/proot-distro/releases/download/v4.30.1/ubuntu-questing-aarch64-pd-v4.30.1.tar.xz"
-    const val UBUNTU_ROOTFS_TAG = "v4.30.1"
-    const val UBUNTU_ROOTFS_ASSET = "ubuntu-questing-aarch64-pd-v4.30.1.tar.xz"
-    const val UBUNTU_ROOTFS_SIZE_BYTES = 35 * 1024 * 1024L
+    const val UBUNTU_ROOTFS_URL = "https://github.com/preet118/antigem/releases/download/antigem-ubuntu24-agents-v1/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+    const val UBUNTU_ROOTFS_TAG = "antigem-ubuntu24-agents-v1"
+    const val UBUNTU_ROOTFS_ASSET = "AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+    const val UBUNTU_ROOTFS_SIZE_BYTES = 176853266L
 
     private const val NOTIFICATION_CHANNEL_ID = "antigem_bootstrap_install"
     private const val NOTIFICATION_ID = 4096
@@ -418,6 +418,43 @@ object LocalEnvironmentManager {
         try { Os.chmod(termuxProfile.absolutePath, 420) } catch (_: Exception) {}
 
         ensureRootfsCompatibilityLinks(ubuntuDir)
+        // Repair previously extracted Ubuntu 26 images from older AntiGem builds:
+        // TAR hardlinks were incorrectly written as empty files, notably coreutils/env.
+        // This is safe to repeat and does not reset or delete the user's Ubuntu data.
+        repairExistingUbuntuHardlinks(ubuntuDir)
+    }
+
+    private fun repairExistingUbuntuHardlinks(ubuntuDir: File) {
+        val coreutils = File(ubuntuDir, "usr/bin/coreutils")
+        val coreutilsLinks = File(ubuntuDir, "usr/lib/cargo/bin/coreutils")
+        if (coreutils.isFile && coreutils.length() > 0 && coreutilsLinks.isDirectory) {
+            coreutilsLinks.listFiles()?.filter { it.isFile && it.length() == 0L }?.forEach { link ->
+                try {
+                    link.delete()
+                    try {
+                        java.nio.file.Files.createLink(link.toPath(), coreutils.toPath())
+                    } catch (_: Exception) {
+                        coreutils.copyTo(link, overwrite = true)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Unable to repair Ubuntu coreutils hardlink: ${link.name}: ${e.message}")
+                }
+            }
+        }
+        val perl = File(ubuntuDir, "usr/bin/perl")
+        val perlAlias = File(ubuntuDir, "usr/bin/perl5.40.1")
+        if (perl.isFile && perl.length() > 0 && perlAlias.isFile && perlAlias.length() == 0L) {
+            try {
+                perlAlias.delete()
+                try {
+                    java.nio.file.Files.createLink(perlAlias.toPath(), perl.toPath())
+                } catch (_: Exception) {
+                    perl.copyTo(perlAlias, overwrite = true)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Unable to repair Ubuntu Perl hardlink: ${e.message}")
+            }
+        }
     }
 
     fun ensureRootfsCompatibilityLinks(ubuntuDir: File): Boolean {
@@ -1346,6 +1383,9 @@ object LocalEnvironmentManager {
                     GzipCompressorInputStream(rawStream)
                 }
                 TarArchiveInputStream(compressedStream).use { tarIn ->
+                    // Ubuntu 26 uses TAR hardlinks for its Rust coreutils commands
+                    // (including /usr/bin/env). Their entries carry no file bytes.
+                    val pendingHardlinks = mutableListOf<Pair<File, String>>()
                     var entry: TarArchiveEntry? = tarIn.nextEntry
                     while (entry != null) {
                         val rawName = entry.name
@@ -1378,7 +1418,14 @@ object LocalEnvironmentManager {
                                     }
                                 }
 
-                                if (entry.isSymbolicLink) {
+                                if (entry.isLink) {
+                                    // Defer until every regular file has been extracted: TAR
+                                    // hardlink destinations can precede their source entry.
+                                    val sourceName = entry.linkName.removePrefix("./").removePrefix("/")
+                                    if (sourceName.isNotBlank()) {
+                                        pendingHardlinks.add(targetFile to sourceName)
+                                    }
+                                } else if (entry.isSymbolicLink) {
                                     if (targetFile.exists() || isSymlink(targetFile)) {
                                         targetFile.setWritable(true, true)
                                         try { targetFile.delete() } catch (_: Exception) {}
@@ -1441,6 +1488,32 @@ object LocalEnvironmentManager {
                             updateInstallNotification(appContext, "Extracting Rootfs ($pct%)", rawName.substringAfterLast("/"), pct)
                         }
                         entry = tarIn.nextEntry
+                    }
+                    // Resolve hardlinks after extraction. Never create zero-length
+                    // files for hardlink entries: /usr/bin/env needs coreutils/env.
+                    for ((destination, sourceName) in pendingHardlinks) {
+                        val relSource = if (isUbuntuMode) ubuntuLegacyRelativePath(sourceName) else sourceName
+                        val source = File(destDir, relSource)
+                        val canonicalRoot = destDir.canonicalFile.toPath()
+                        val sourcePath = source.canonicalFile.toPath()
+                        val destinationPath = destination.absoluteFile.toPath()
+                        if (!sourcePath.startsWith(canonicalRoot) || !destinationPath.startsWith(canonicalRoot)) {
+                            throw IOException("Unsafe TAR hardlink: $sourceName")
+                        }
+                        if (!source.isFile || source.length() == 0L) {
+                            throw IOException("Missing TAR hardlink source: $sourceName")
+                        }
+                        destination.parentFile?.mkdirs()
+                        if (destination.exists() || isSymlink(destination)) destination.delete()
+                        try {
+                            java.nio.file.Files.createLink(destinationPath, source.toPath())
+                        } catch (e: Exception) {
+                            // Internal app storage may disallow links on some devices.
+                            source.copyTo(destination, overwrite = true)
+                        }
+                    }
+                    if (pendingHardlinks.isNotEmpty()) {
+                        log("Restored ${pendingHardlinks.size} TAR hardlinks in Ubuntu rootfs")
                     }
                 }
             } else {
@@ -2382,7 +2455,9 @@ All files created here persist inside the application.
             processBuilder.environment()["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             processBuilder.environment()["TMPDIR"] = "/tmp"
             processBuilder.environment()["DEBIAN_FRONTEND"] = "noninteractive"
-            // processBuilder.environment()["PROOT_NO_SECCOMP"] = "1"
+            // Use PRoot's normal syscall handling. Forcing PROOT_NO_SECCOMP=1
+            // caused ENOSYS/Function not implemented on some Android kernels.
+            processBuilder.environment().remove("PROOT_NO_SECCOMP")
             processBuilder.environment()["PROOT_LOADER"] = getProotLoaderPath(context)
             processBuilder.environment()["PROOT_TMP_DIR"] = prootTmpDir.absolutePath
             processBuilder.environment()["LD_LIBRARY_PATH"] = "${context.filesDir.absolutePath}/lib:${context.filesDir.absolutePath}/bin"
