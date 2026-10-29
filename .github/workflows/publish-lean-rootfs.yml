@@ -1,0 +1,33 @@
+name: Publish Verified Lean Ubuntu 24 Rootfs
+on:
+  push:
+    branches:
+      - fix/ubuntu-26-claude-antigravity
+    paths:
+      - .github/workflows/publish-lean-rootfs.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download already-tested lean ARM64 rootfs
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 40848498569
+          name: AntiGem-Ubuntu24-ARM64-Preconfigured
+          path: /tmp/ready-rootfs
+          github-token: ${{ github.token }}
+      - name: Validate and publish lean image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="/tmp/ready-rootfs/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+          echo "680117055f80b9289bf7340ff461c9e5e2428b1f3e2f6986aede5fc9a67555ee  $asset" | sha256sum -c -
+          stat -c 'Asset bytes: %s' "$asset"
+          gh release upload antigem-ubuntu24-agents-v1 "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/antigem-ubuntu24-agents-v1" --jq '.assets[] | [.name,.state,.size] | @tsv'
