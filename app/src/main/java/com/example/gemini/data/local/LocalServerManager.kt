@@ -331,7 +331,7 @@ object LocalServerManager {
             fi
             if [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; then
                 curl -fsSL https://claude.ai/install.sh -o /tmp/antigem-claude-install.sh
-                bash /tmp/antigem-claude-install.sh
+                CLAUDE_INSTALL_ALLOW_SUDO=1 bash /tmp/antigem-claude-install.sh
                 test -x /root/.local/bin/claude
             fi
         """.trimIndent().replace("${agyEnabled}", agyEnabled.toString()).replace("${claudeEnabled}", claudeEnabled.toString())
