@@ -308,7 +308,7 @@ object LocalServerManager {
                 echo "Existing Ubuntu version retained; agent provisioning expects Ubuntu 24.04"
                 exit 0
             fi
-            export PATH="/root/.local/bin:${'
+            # Use explicit absolute paths for the installed CLIs.
             if { [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; } ||
                { [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; }; then
                 if ! command -v curl >/dev/null 2>&1; then
