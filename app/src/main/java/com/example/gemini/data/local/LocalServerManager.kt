@@ -212,7 +212,7 @@ object LocalServerManager {
         // In Standard, this path is inside the Ubuntu guest, NOT Android's /root.
         // Do not make a missing optional AGY CLI fatal for the IDE / Claude bridge.
         val agyExists = if (LocalEnvironmentManager.isTermuxPackage(context)) {
-            File(agyCmd).isFile
+            true // Preserve the original standalone Termux variant behavior
         } else {
             File(LocalEnvironmentManager.getUbuntuRootDir(context), agyCmd.removePrefix("/")).isFile
         }
