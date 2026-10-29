@@ -1346,6 +1346,9 @@ object LocalEnvironmentManager {
                     GzipCompressorInputStream(rawStream)
                 }
                 TarArchiveInputStream(compressedStream).use { tarIn ->
+                    // Ubuntu 26 uses TAR hardlinks for its Rust coreutils commands
+                    // (including /usr/bin/env). Their entries carry no file bytes.
+                    val pendingHardlinks = mutableListOf<Pair<File, String>>()
                     var entry: TarArchiveEntry? = tarIn.nextEntry
                     while (entry != null) {
                         val rawName = entry.name
@@ -1378,7 +1381,14 @@ object LocalEnvironmentManager {
                                     }
                                 }
 
-                                if (entry.isSymbolicLink) {
+                                if (entry.isLink) {
+                                    // Defer until every regular file has been extracted: TAR
+                                    // hardlink destinations can precede their source entry.
+                                    val sourceName = entry.linkName.removePrefix("./").removePrefix("/")
+                                    if (sourceName.isNotBlank()) {
+                                        pendingHardlinks.add(targetFile to sourceName)
+                                    }
+                                } else if (entry.isSymbolicLink) {
                                     if (targetFile.exists() || isSymlink(targetFile)) {
                                         targetFile.setWritable(true, true)
                                         try { targetFile.delete() } catch (_: Exception) {}
@@ -1441,6 +1451,32 @@ object LocalEnvironmentManager {
                             updateInstallNotification(appContext, "Extracting Rootfs ($pct%)", rawName.substringAfterLast("/"), pct)
                         }
                         entry = tarIn.nextEntry
+                    }
+                    // Resolve hardlinks after extraction. Never create zero-length
+                    // files for hardlink entries: /usr/bin/env needs coreutils/env.
+                    for ((destination, sourceName) in pendingHardlinks) {
+                        val relSource = if (isUbuntuMode) ubuntuLegacyRelativePath(sourceName) else sourceName
+                        val source = File(destDir, relSource)
+                        val canonicalRoot = destDir.canonicalFile.toPath()
+                        val sourcePath = source.canonicalFile.toPath()
+                        val destinationPath = destination.absoluteFile.toPath()
+                        if (!sourcePath.startsWith(canonicalRoot) || !destinationPath.startsWith(canonicalRoot)) {
+                            throw IOException("Unsafe TAR hardlink: $sourceName")
+                        }
+                        if (!source.isFile || source.length() == 0L) {
+                            throw IOException("Missing TAR hardlink source: $sourceName")
+                        }
+                        destination.parentFile?.mkdirs()
+                        if (destination.exists() || isSymlink(destination)) destination.delete()
+                        try {
+                            java.nio.file.Files.createLink(destinationPath, source.toPath())
+                        } catch (e: Exception) {
+                            // Internal app storage may disallow links on some devices.
+                            source.copyTo(destination, overwrite = true)
+                        }
+                    }
+                    if (pendingHardlinks.isNotEmpty()) {
+                        log("Restored ${pendingHardlinks.size} TAR hardlinks in Ubuntu rootfs")
                     }
                 }
             } else {
