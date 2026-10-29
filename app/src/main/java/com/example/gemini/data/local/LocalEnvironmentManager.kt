@@ -2455,8 +2455,9 @@ All files created here persist inside the application.
             processBuilder.environment()["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             processBuilder.environment()["TMPDIR"] = "/tmp"
             processBuilder.environment()["DEBIAN_FRONTEND"] = "noninteractive"
-            // Android seccomp can return ENOSYS for traced execve/chmod/chdir in PRoot.
-            processBuilder.environment()["PROOT_NO_SECCOMP"] = "1"
+            // Use PRoot's normal syscall handling. Forcing PROOT_NO_SECCOMP=1
+            // caused ENOSYS/Function not implemented on some Android kernels.
+            processBuilder.environment().remove("PROOT_NO_SECCOMP")
             processBuilder.environment()["PROOT_LOADER"] = getProotLoaderPath(context)
             processBuilder.environment()["PROOT_TMP_DIR"] = prootTmpDir.absolutePath
             processBuilder.environment()["LD_LIBRARY_PATH"] = "${context.filesDir.absolutePath}/lib:${context.filesDir.absolutePath}/bin"
