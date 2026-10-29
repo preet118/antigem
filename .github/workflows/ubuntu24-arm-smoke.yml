@@ -25,6 +25,7 @@ jobs:
           printf "nameserver 1.1.1.1\n" | sudo tee /tmp/guest/etc/resolv.conf
           test -x /tmp/guest/usr/bin/env
           test -x /tmp/guest/usr/bin/bash
+          sudo chmod 1777 /tmp/guest/tmp
           sudo cp -a /dev/null /tmp/guest/dev/null
           sudo cp -a /dev/urandom /tmp/guest/dev/urandom
           sudo cp -a /dev/random /tmp/guest/dev/random
