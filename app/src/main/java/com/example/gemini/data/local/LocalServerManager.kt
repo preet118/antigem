@@ -209,7 +209,14 @@ object LocalServerManager {
         val tzOffset = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000
 
         val agyEnabled = com.example.gemini.domain.model.AgentKind.AGY in com.example.gemini.data.agent.AgentPreferences.enabledSync(context)
-        val binParam = if (agyEnabled && agyCmd.isNotBlank()) {
+        // In Standard, this path is inside the Ubuntu guest, NOT Android's /root.
+        // Do not make a missing optional AGY CLI fatal for the IDE / Claude bridge.
+        val agyExists = if (LocalEnvironmentManager.isTermuxPackage(context)) {
+            File(agyCmd).isFile
+        } else {
+            File(LocalEnvironmentManager.getUbuntuRootDir(context), agyCmd.removePrefix("/")).isFile
+        }
+        val binParam = if (agyEnabled && agyCmd.isNotBlank() && agyExists) {
             " --bin \"$agyCmd\""
         } else {
             ""
@@ -222,7 +229,8 @@ object LocalServerManager {
         }
 
         // agents switched off in the app never run (no AGY hub / no Claude Code endpoints)
-        val agentFlags = com.example.gemini.data.agent.AgentPreferences.bridgeFlags(context)
+        val agentFlags = com.example.gemini.data.agent.AgentPreferences.bridgeFlags(context) +
+            (if (agyEnabled && !agyExists) " --no-hub" else "")
 
         return "$bridgeCmd -f --token $token -p $bridgePort --hub-port $hubPort --tz-offset $tzOffset$binParam$claudeBinParam$agentFlags"
     }
@@ -312,8 +320,8 @@ object LocalServerManager {
             if { [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; } ||
                { [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; }; then
                 if ! command -v curl >/dev/null 2>&1; then
-                    apt-get update -qq
-                    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates procps
+                    apt-get update -qq </dev/null
+                    DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 install -y -qq curl ca-certificates procps </dev/null
                 fi
             fi
             if [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; then
@@ -328,7 +336,12 @@ object LocalServerManager {
             fi
         """.trimIndent().replace("${agyEnabled}", agyEnabled.toString()).replace("${claudeEnabled}", claudeEnabled.toString())
         val result = LocalEnvironmentManager.executeCommand(script, context = context, timeoutSeconds = 1200)
-        if (result.exitCode != 0) Log.e(TAG, "Ubuntu agent provisioning failed: ${result.output.takeLast(1500)}")
+        if (result.exitCode != 0) {
+            Log.e(TAG, "Ubuntu agent provisioning failed: ${result.output.takeLast(1500)}")
+            _status.value = LocalServerStatus.Error("AI agent setup failed: ${result.output.takeLast(500)}")
+        } else {
+            Log.i(TAG, "Ubuntu agent preparation finished")
+        }
     }
 
     fun startServer(context: Context, forceRestart: Boolean = false) {
