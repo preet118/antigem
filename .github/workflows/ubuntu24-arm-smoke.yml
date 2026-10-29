@@ -47,7 +47,7 @@ jobs:
             test -x /root/.local/bin/agy
             /root/.local/bin/agy --version
             curl -fsSL https://claude.ai/install.sh -o /tmp/claude-install.sh
-            CLAUDE_INSTALL_ALLOW_SUDO=1 bash /tmp/claude-install.sh
+            CLAUDE_INSTALL_ALLOW_SUDO=1 bash /tmp/claude-install.sh 2.1.209
             test -x /root/.local/bin/claude
             /root/.local/bin/claude --version
             echo "Ubuntu24 ARM64 rootfs and both CLI installers: OK (not Android PRoot)"
