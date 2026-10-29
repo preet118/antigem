@@ -7,7 +7,7 @@ on:
     paths:
       - .github/workflows/build-preconfigured-ubuntu.yml
 permissions:
-  contents: read
+  contents: write
 jobs:
   rootfs:
     runs-on: ubuntu-24.04-arm
@@ -60,3 +60,17 @@ jobs:
           path: /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish downloadable agent-ready rootfs to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="antigem-ubuntu24-agents-v1"
+          asset="/tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "AntiGem Ubuntu 24 ARM64 preconfigured rootfs (test)" --notes "Ubuntu 24.04.5 LTS ARM64 with official Antigravity CLI and Claude Code 2.1.112 via npm. Created without user files, credentials or projects. GitHub ARM64 chroot-tested; actual Android PRoot/AGY Hub compatibility remains unverified." --prerelease
+          fi
