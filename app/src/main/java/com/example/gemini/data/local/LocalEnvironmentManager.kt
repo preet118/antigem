@@ -418,6 +418,43 @@ object LocalEnvironmentManager {
         try { Os.chmod(termuxProfile.absolutePath, 420) } catch (_: Exception) {}
 
         ensureRootfsCompatibilityLinks(ubuntuDir)
+        // Repair previously extracted Ubuntu 26 images from older AntiGem builds:
+        // TAR hardlinks were incorrectly written as empty files, notably coreutils/env.
+        // This is safe to repeat and does not reset or delete the user's Ubuntu data.
+        repairExistingUbuntuHardlinks(ubuntuDir)
+    }
+
+    private fun repairExistingUbuntuHardlinks(ubuntuDir: File) {
+        val coreutils = File(ubuntuDir, "usr/bin/coreutils")
+        val coreutilsLinks = File(ubuntuDir, "usr/lib/cargo/bin/coreutils")
+        if (coreutils.isFile && coreutils.length() > 0 && coreutilsLinks.isDirectory) {
+            coreutilsLinks.listFiles()?.filter { it.isFile && it.length() == 0L }?.forEach { link ->
+                try {
+                    link.delete()
+                    try {
+                        java.nio.file.Files.createLink(link.toPath(), coreutils.toPath())
+                    } catch (_: Exception) {
+                        coreutils.copyTo(link, overwrite = true)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Unable to repair Ubuntu coreutils hardlink: ${link.name}: ${e.message}")
+                }
+            }
+        }
+        val perl = File(ubuntuDir, "usr/bin/perl")
+        val perlAlias = File(ubuntuDir, "usr/bin/perl5.40.1")
+        if (perl.isFile && perl.length() > 0 && perlAlias.isFile && perlAlias.length() == 0L) {
+            try {
+                perlAlias.delete()
+                try {
+                    java.nio.file.Files.createLink(perlAlias.toPath(), perl.toPath())
+                } catch (_: Exception) {
+                    perl.copyTo(perlAlias, overwrite = true)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Unable to repair Ubuntu Perl hardlink: ${e.message}")
+            }
+        }
     }
 
     fun ensureRootfsCompatibilityLinks(ubuntuDir: File): Boolean {
