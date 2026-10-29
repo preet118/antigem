@@ -331,8 +331,18 @@ object LocalServerManager {
             fi
             if [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; then
                 curl -fsSL https://claude.ai/install.sh -o /tmp/antigem-claude-install.sh
-                CLAUDE_INSTALL_ALLOW_SUDO=1 bash /tmp/antigem-claude-install.sh
+                # Prefer the current official native release. Some ARM64 kernels
+                # cannot execute its Bun runtime; use a tested Node.js fallback.
+                ulimit -c 0 || true
+                if ! (CLAUDE_INSTALL_ALLOW_SUDO=1 bash /tmp/antigem-claude-install.sh &&
+                      /root/.local/bin/claude --version >/dev/null 2>&1); then
+                    echo "Native Claude Code unavailable; installing Node.js compatibility fallback"
+                    rm -f /root/.local/bin/claude
+                    DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Use-Pty=0 install -y -qq nodejs npm </dev/null
+                    npm install -g --prefix /root/.local @anthropic-ai/claude-code@2.1.112
+                fi
                 test -x /root/.local/bin/claude
+                /root/.local/bin/claude --version
             fi
         """.trimIndent().replace("${agyEnabled}", agyEnabled.toString()).replace("${claudeEnabled}", claudeEnabled.toString())
         val result = LocalEnvironmentManager.executeCommand(script, context = context, timeoutSeconds = 1200)
