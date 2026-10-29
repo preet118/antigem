@@ -308,7 +308,200 @@ object LocalServerManager {
                 echo "Existing Ubuntu version retained; agent provisioning expects Ubuntu 24.04"
                 exit 0
             fi
-            export PATH="/root/.local/bin:$PATH"
+            export PATH="/root/.local/bin:${'
+            if { [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; } ||
+               { [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; }; then
+                if ! command -v curl >/dev/null 2>&1; then
+                    apt-get update -qq
+                    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates procps
+                fi
+            fi
+            if [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; then
+                curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/antigem-agy-install.sh
+                bash /tmp/antigem-agy-install.sh
+                test -x /root/.local/bin/agy
+            fi
+            if [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; then
+                curl -fsSL https://claude.ai/install.sh -o /tmp/antigem-claude-install.sh
+                bash /tmp/antigem-claude-install.sh
+                test -x /root/.local/bin/claude
+            fi
+        """.trimIndent().replace("${agyEnabled}", agyEnabled.toString()).replace("${claudeEnabled}", claudeEnabled.toString())
+        val result = LocalEnvironmentManager.executeCommand(script, context = context, timeoutSeconds = 1200)
+        if (result.exitCode != 0) Log.e(TAG, "Ubuntu agent provisioning failed: ${result.output.takeLast(1500)}")
+    }
+
+    fun startServer(context: Context, forceRestart: Boolean = false) {
+        if (hasServerScript(context)) {
+            hasInitialAutoStarted = true
+        }
+        activeJob?.cancel()
+        activeJob = managerScope.launch {
+            startServerInternal(context, forceRestart)
+        }
+    }
+
+    private suspend fun startServerInternal(context: Context, forceRestart: Boolean) {
+        val current = _status.value
+        val existingSession = _serverSession.value
+
+        if (!forceRestart && existingSession != null && !existingSession.isExited.value && (current is LocalServerStatus.Running || current is LocalServerStatus.Starting)) {
+            Log.d(TAG, "[ServerManager] Server session already running, skipping start")
+            return
+        }
+
+        if (!LocalEnvironmentManager.isInstalled(context)) {
+            Log.d(TAG, "[ServerManager] Bootstrap not installed, skipping server start")
+            return
+        }
+
+        val appContext = context.applicationContext
+        ensureBridgeBinary(appContext)
+        prepareUbuntuAgents(appContext)
+        // the bridge starts Claude Code through the app's launcher (--claude-bin)
+        LocalEnvironmentManager.ensureGlibcEnvironment(appContext)
+        LocalEnvironmentManager.ensureClaudeWrapper(appContext)
+
+        val command = resolveServerCommand(appContext)
+        if (command == null) {
+            Log.d(TAG, "[ServerManager] No start or server executable found in home directory")
+            return
+        }
+
+        _status.value = LocalServerStatus.Starting
+
+        // If a persistent terminal session is already alive, reuse it and execute command inside it
+        if (existingSession != null && !existingSession.isExited.value) {
+            Log.d(TAG, "[ServerManager] Reusing active persistent terminal session to launch: $command")
+            existingSession.write("\u0003")
+            delay(150)
+            existingSession.write("cd \$HOME && $command\n")
+            _status.value = LocalServerStatus.Running()
+            return
+        }
+
+        Log.d(
+            TAG,
+            "[ServerManager] Spawning dedicated persistent terminal session for server runner with initialCommand: $command"
+        )
+
+        val session = withContext(Dispatchers.Main) {
+            LocalPtySession(
+                id = "server-runner-pty",
+                initialTitle = "Server Runner",
+                context = appContext,
+                isSsh = false,
+                initialCommand = command,
+                initialCols = 80,
+                initialRows = 24
+            )
+        }
+
+        _serverSession.value = session
+        _status.value = LocalServerStatus.Running()
+
+        exitObserverJob?.cancel()
+        exitObserverJob = managerScope.launch {
+            session.isExited.collect { isExited ->
+                if (isExited) {
+                    _status.value = LocalServerStatus.Stopped(exitCode = 0)
+                }
+            }
+        }
+    }
+
+    fun stopServer() {
+        activeJob?.cancel()
+        activeJob = managerScope.launch {
+            stopServerInternal()
+        }
+    }
+
+    private suspend fun stopServerInternal() {
+        _status.value = LocalServerStatus.Stopping
+
+        val bridgeUrl = AuthPreferences.currentBridgeHttpUrl
+        val session = _serverSession.value
+
+        // 1. Send graceful shutdown HTTP request to the Go IDE bridge
+        withContext(Dispatchers.IO) {
+            try {
+                val req = Request.Builder()
+                    .url("$bridgeUrl/api/shutdown")
+                    .post("{}".toRequestBody(null))
+                    .build()
+                AgyBridgeService.instance.fastClient.newCall(req).execute().close()
+            } catch (_: Exception) {
+            }
+        }
+
+        // 2. Also send Ctrl+C to persistent PTY terminal session
+        if (session != null && !session.isExited.value) {
+            try {
+                session.write("\u0003")
+            } catch (_: Exception) {
+            }
+        }
+
+        // 3. Send pkill to terminate any child tree processes (agy daemon, child node processes)
+        if (session != null && !session.isExited.value) {
+            try {
+                session.write("pkill -f gemini-server; pkill -f 'server -f'; pkill -f 'agy '\n")
+            } catch (_: Exception) {
+            }
+        }
+
+        // 4. Wait for SystemConnectionState to transition to Offline
+        withTimeoutOrNull(2500L) {
+            while (AgyBridgeService.instance.systemConnectionState.value !is com.example.gemini.data.remote.SystemConnectionState.Offline) {
+                delay(150)
+            }
+        }
+
+        AgyBridgeService.instance.notifyLocalStopped()
+        // Retain _serverSession.value so terminal logs and history remain fully visible in the dialog
+        _status.value = LocalServerStatus.Stopped(exitCode = 0)
+    }
+
+    /** Restarts the server and waits until it is starting again (agent selection changed). */
+    suspend fun restartServerAndWait(context: Context) {
+        hasInitialAutoStarted = true
+        activeJob?.cancel()
+        _status.value = LocalServerStatus.Starting
+        stopServerInternal()
+        delay(200)
+        startServerInternal(context, forceRestart = true)
+    }
+
+    /**
+     * Stops the server and ends its terminal session for good (the app restarts next, e.g. after the agent
+     * selection changed): nothing of the old server may keep running.
+     */
+    suspend fun stopServerCompletely() {
+        hasInitialAutoStarted = true
+        activeJob?.cancel()
+        stopServerInternal()
+        // let the bridge finish stopping its children (Claude processes, the AGY hub) before the session is closed
+        withTimeoutOrNull(5_000L) {
+            while (AgyBridgeService.instance.systemConnectionState.value !is com.example.gemini.data.remote.SystemConnectionState.Offline) {
+                delay(150)
+            }
+        }
+        forceKillAll()
+    }
+
+    fun restartServer(context: Context) {
+        hasInitialAutoStarted = true
+        activeJob?.cancel()
+        activeJob = managerScope.launch {
+            _status.value = LocalServerStatus.Starting
+            stopServerInternal()
+            delay(200)
+            startServerInternal(context, forceRestart = true)
+        }
+    }
+}
+}PATH"
             if { [ "${agyEnabled}" = "true" ] && [ ! -x /root/.local/bin/agy ]; } ||
                { [ "${claudeEnabled}" = "true" ] && [ ! -x /root/.local/bin/claude ]; }; then
                 if ! command -v curl >/dev/null 2>&1; then
