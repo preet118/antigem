@@ -395,7 +395,7 @@ fun FullScreenLocalToolsInstaller(
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = if (isTermux) {
-                                            if (LocalEnvironmentManager.isStandalonePackage(context)) "Requires a custom bootstrap built for com.antigem.native; original com.termux archives are rejected." else "Downloads verified Termux rootfs (~350MB) with preconfigured tools and environment."
+                                            if (LocalEnvironmentManager.isStandalonePackage(context)) "Requires a custom bootstrap built for com.antigem.shell; original com.termux archives are rejected." else "Downloads verified Termux rootfs (~350MB) with preconfigured tools and environment."
                                         } else {
                                             "Downloads official minimal Ubuntu ARM64 rootfs container with glibc, bash, and development tools."
                                         },
