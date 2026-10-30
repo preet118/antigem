@@ -2,7 +2,7 @@
 
 **Implementation status: development candidate, not production verified.**
 
-This branch starts from successful APK build #33 (`c3aafb7`) and keeps `com.antigem` independent from existing `com.termux`.
+This branch starts from successful APK build #33 (`c3aafb7`) and builds the **new** `com.antigem.full` APK. It can coexist with old Build #33 (`com.antigem`) and Termux (`com.termux`).
 The app uses an internal Ubuntu 24.04 ARM64 rootfs via PRoot; it does **not** uninstall or modify the external Termux app.
 
 ## What's now in the proposed full environment
@@ -23,13 +23,13 @@ The app uses an internal Ubuntu 24.04 ARM64 rootfs via PRoot; it does **not** un
 - Installer refuses to mark the full tools installed merely because Bash runs; it checks language toolchains, agent binaries and the built-in bridge asset.
 - App backup/restore scripts are adapted to /usr and /root, and are executed inside PRoot for Standard; an Ubuntu bootstrap backup uses the Ubuntu backup script rather than a native-Termux backup script.
 - Installer checks aarch64 and 4 GiB free space before beginning. Actual usage may require substantially more; the build must report unpacked size.
-- Existing Standard APK is `com.antigem`, so the separate Termux app `com.termux` and its private files are not touched.
+- The new Full APK has `com.antigem.full`, so the older Build #33 app (`com.antigem`) and separate Termux app (`com.termux`) and their private files are not touched.
 
 ## Build paths
 
-Android APK build:
+Android APK #34 build:
 ```bash
-./gradlew :app:assembleStandardDebug
+./gradlew :app:assembleFullDebug
 ```
 
 Rootfs builder:
