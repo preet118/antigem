@@ -170,12 +170,15 @@ object LocalEnvironmentManager {
         _installerLogs.value = emptyList()
     }
 
-    fun getPrefixDir(context: Context): File = File(context.filesDir, "usr")
+    // Termux executables are compiled with /data/data/<package>/files paths on the primary user.
+    private fun getLinuxFilesRoot(context: Context): File =
+        if (isStandalonePackage(context)) File("/data/data/" + context.packageName + "/files") else context.filesDir
+    fun getPrefixDir(context: Context): File = File(getLinuxFilesRoot(context), "usr")
     fun getBinDir(context: Context): File = File(getPrefixDir(context), "bin")
     fun getLibDir(context: Context): File = File(getPrefixDir(context), "lib")
     fun getEtcDir(context: Context): File = File(getPrefixDir(context), "etc")
     fun getTmpDir(context: Context): File = File(getPrefixDir(context), "tmp")
-    fun getHomeDir(context: Context): File = File(context.filesDir, "home")
+    fun getHomeDir(context: Context): File = File(getLinuxFilesRoot(context), "home")
     fun getProjectsDir(context: Context): File = File(getHomeDir(context), "projects")
     fun getUbuntuRootDir(context: Context): File = File(context.filesDir, "ubuntu")
     fun isStandalonePackage(context: Context): Boolean = context.packageName == "com.antigem.native"
@@ -1316,7 +1319,21 @@ object LocalEnvironmentManager {
                         if (marker == null || inner == null) false else {
                             val metadata = archive.getInputStream(marker).bufferedReader().use { it.readText() }
                             val parsed = org.json.JSONObject(metadata)
-                            parsed.optString("package_id") == appContext.packageName && parsed.optString("architecture") == "aarch64"
+                            val expectedSha = parsed.optString("bootstrap_sha256")
+                            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                            archive.getInputStream(inner).use { input ->
+                                val buffer = ByteArray(65536)
+                                while (true) {
+                                    val n = input.read(buffer)
+                                    if (n == -1) break
+                                    digest.update(buffer, 0, n)
+                                }
+                            }
+                            val actualSha = digest.digest().joinToString("") { "%02x".format(it) }
+                            parsed.optString("package_id") == appContext.packageName &&
+                                parsed.optString("architecture") == "aarch64" &&
+                                parsed.optString("prefix") == "/data/data/com.antigem.native/files/usr" &&
+                                expectedSha.length == 64 && expectedSha.equals(actualSha, ignoreCase = true)
                         }
                     }
                 } catch (_: Exception) { false }
