@@ -66,10 +66,10 @@ object LocalEnvironmentManager {
     const val HARDCODED_ROOTFS_ASSET = "bootrapz_2026-10-04.zip"
     const val HARDCODED_ROOTFS_SIZE_BYTES = 350 * 1024 * 1024L
 
-    const val UBUNTU_ROOTFS_URL = "https://github.com/preet118/antigem/releases/download/antigem-ubuntu24-agents-v1/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
-    const val UBUNTU_ROOTFS_TAG = "antigem-ubuntu24-agents-v1"
-    const val UBUNTU_ROOTFS_ASSET = "AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
-    const val UBUNTU_ROOTFS_SIZE_BYTES = 176853266L
+    const val UBUNTU_ROOTFS_URL = "https://github.com/preet118/antigem/releases/download/antigem-ubuntu24-full-v1/AntiGem-Ubuntu24-ARM64-Full.tar.gz"
+    const val UBUNTU_ROOTFS_TAG = "antigem-ubuntu24-full-v1"
+    const val UBUNTU_ROOTFS_ASSET = "AntiGem-Ubuntu24-ARM64-Full.tar.gz"
+    const val UBUNTU_ROOTFS_SIZE_BYTES = 700 * 1024 * 1024L // display estimate until release exists
 
     private const val NOTIFICATION_CHANNEL_ID = "antigem_bootstrap_install"
     private const val NOTIFICATION_ID = 4096
@@ -988,7 +988,8 @@ object LocalEnvironmentManager {
                             }
 
                             finalDownloadedSize = tempZipFile.length()
-                            if (finalDownloadedSize >= MIN_BOOTSTRAP_SIZE_BYTES && validateArchiveIntegrity(tempZipFile)) {
+                            if (finalDownloadedSize >= MIN_BOOTSTRAP_SIZE_BYTES && validateArchiveIntegrity(tempZipFile) &&
+                                (isTermux || verifyPublishedUbuntuRootfsSha256(tempZipFile, targetUrl))) {
                                 downloadSucceeded = true
                             } else {
                                 tempZipFile.delete()
@@ -1812,6 +1813,35 @@ object LocalEnvironmentManager {
             authPreferences.setTerminalToolEnabled(false)
         } catch (e: Exception) {
             Log.w(TAG, "Cleanup error: ${e.message}")
+        }
+    }
+
+    /** Full Ubuntu release supplies a checksum sidecar; fail closed if absent. */
+    private fun verifyPublishedUbuntuRootfsSha256(archive: File, downloadUrl: String): Boolean {
+        return try {
+            val req = Request.Builder().url("$downloadUrl.sha256").get().build()
+            val expected = httpClient.newCall(req).execute().use { response ->
+                if (!response.isSuccessful) throw IllegalStateException("Checksum HTTP ${response.code}")
+                val raw = response.body?.string()?.trim().orEmpty()
+                val first = raw.split(Regex("\\s+")).firstOrNull().orEmpty()
+                if (!first.matches(Regex("[a-fA-F0-9]{64}"))) throw IllegalStateException("Invalid SHA256 response")
+                first.lowercase()
+            }
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            FileInputStream(archive).use { input ->
+                val buffer = ByteArray(65536)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            if (actual != expected) Log.e(TAG, "Ubuntu SHA256 mismatch: expected $expected got $actual")
+            actual == expected
+        } catch (e: Exception) {
+            Log.e(TAG, "Ubuntu SHA256 verification failed: ${e.message}")
+            false
         }
     }
 
