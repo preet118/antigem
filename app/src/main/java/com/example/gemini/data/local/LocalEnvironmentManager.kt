@@ -1765,8 +1765,16 @@ object LocalEnvironmentManager {
             )
             log("Verification output: ${testRes.output.trim()}")
 
-            if (!testRes.output.contains("GEMINI_LOCAL_TOOLS_OK")) {
-                val errorMsg = "Shell verification test failed: ${testRes.output}"
+            // Full Ubuntu setup must not claim success just because Bash starts.
+            val fullUbuntuCheck = if (!isTermuxPackage(appContext)) executeCommand(
+                command = "for tool in python3 pip git gcc g++ clang go javac rustc cargo node npm npx php ruby lua Rscript zip unzip jq agy claude; do command -v \"\$tool\" >/dev/null || { echo MISSING_TOOL:\$tool; exit 42; }; done; test -f /root/.claude/skills/project-check/SKILL.md && test -x /antigem/bin/agy_ide_bridge && echo ANTIGEM_FULL_TOOLCHAIN_OK",
+                context = appContext,
+                timeoutSeconds = 120
+            ) else null
+            log("Full Ubuntu toolchain verification: ${fullUbuntuCheck?.output ?: "not applicable"}")
+            if (!testRes.output.contains("GEMINI_LOCAL_TOOLS_OK") || testRes.exitCode != 0 ||
+                (fullUbuntuCheck != null && (fullUbuntuCheck.exitCode != 0 || !fullUbuntuCheck.output.contains("ANTIGEM_FULL_TOOLCHAIN_OK")))) {
+                val errorMsg = "Ubuntu verification failed: ${testRes.output}; tools: ${fullUbuntuCheck?.output ?: "not applicable"}"
                 log("❌ $errorMsg")
                 cleanupFailedInstall(appContext, authPreferences)
                 updateInstallNotification(appContext, "Installation Failed", errorMsg, -2, ongoing = false, force = true)
