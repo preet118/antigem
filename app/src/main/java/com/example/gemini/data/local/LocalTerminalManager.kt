@@ -146,6 +146,7 @@ class LocalPtySession(
                 val ubuntuDir = LocalEnvironmentManager.getUbuntuRootDir(context)
                 val prootBin = LocalEnvironmentManager.getProotBinaryPath(context)
                 val homeDir = LocalEnvironmentManager.getHomeDir(context)
+                LocalEnvironmentManager.getBinDir(context).mkdirs()
 
                 val prootTmpDir = File(context.filesDir, "tmp").apply {
                     mkdirs()
