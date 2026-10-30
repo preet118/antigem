@@ -12,7 +12,8 @@ on:
       - feature/ubuntu-full-workspace
 
 permissions:
-  contents: read
+  # The called rootfs job publishes the tested image+APK as a prerelease.
+  contents: write
 
 jobs:
   build:
