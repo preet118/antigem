@@ -4,7 +4,7 @@
 
 ## Goal
 
-Build a new Android package `com.antigem.native` that runs an **independently owned native Termux-compatible Linux environment**, retaining AntiGem's Android UI, workspace, editor, browser/MCP, agent backends and other features. The original `com.termux` installed on the device stays untouched.
+Build a new Android package `com.antigem.shell` that runs an **independently owned native Termux-compatible Linux environment**, retaining AntiGem's Android UI, workspace, editor, browser/MCP, agent backends and other features. The original `com.termux` installed on the device stays untouched.
 
 ## Done in this development branch
 
@@ -12,7 +12,7 @@ Build a new Android package `com.antigem.native` that runs an **independently ow
 - Switched this flavor to native Termux shell mode rather than Ubuntu PRoot.
 - Added a separate bootstrap URL and **refused unlabelled legacy `com.termux` archives**.
 - Added a checksum and package-prefix/arch marker check to the installer.
-- Changed native Linux prefix to `/data/data/com.antigem.native/files/usr` for primary Android user.
+- Changed native Linux prefix to `/data/data/com.antigem.shell/files/usr` for primary Android user.
 - Improved installer verification: required tools include bash, python3, node, npm, git, clang, agy, apt, pkg.
 - Fixed a Termux API dispatcher hardcoding `com.termux`.
 - Added a Linux/Docker helper for re-building a custom Termux bootstrap and Python packaging helper.
