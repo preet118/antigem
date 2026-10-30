@@ -1246,6 +1246,43 @@ object LocalEnvironmentManager {
                 return@withContext false
             }
 
+            // Do not load original com.termux binaries into an incompatible app prefix.
+            if (isStandalonePackage(appContext)) {
+                val correctArchive = try {
+                    java.util.zip.ZipFile(tempZipFile).use { archive ->
+                        val marker = archive.getEntry("antigem-native.json")
+                        val inner = archive.getEntry("bootstrap-aarch64.zip")
+                        if (marker == null || inner == null) false else {
+                            val metadata = archive.getInputStream(marker).bufferedReader().use { it.readText() }
+                            val parsed = org.json.JSONObject(metadata)
+                            val expectedSha = parsed.optString("bootstrap_sha256")
+                            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                            archive.getInputStream(inner).use { input ->
+                                val buffer = ByteArray(65536)
+                                while (true) {
+                                    val n = input.read(buffer)
+                                    if (n == -1) break
+                                    digest.update(buffer, 0, n)
+                                }
+                            }
+                            val actualSha = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+                            parsed.optString("package_id") == appContext.packageName &&
+                                parsed.optString("architecture") == "aarch64" &&
+                                parsed.optString("prefix") == "/data/data/com.antigem.shell/files/usr" &&
+                                expectedSha.length == 64 && expectedSha.equals(actualSha, ignoreCase = true)
+                        }
+                    }
+                } catch (_: Exception) { false }
+                if (getBootstrapArch() != "aarch64" || !correctArchive) {
+                    tempZipFile.delete()
+                    val errorMsg = "Incompatible bootstrap. Requires aarch64 archive built for com.antigem.shell; original com.termux ZIP cannot be used."
+                    log("❌ "+errorMsg)
+                    _installerState.value = LocalInstallerState.Error(errorMessage = errorMsg, canRetry = true)
+                    updateInstallNotification(appContext, "Installation Failed", errorMsg, -2, ongoing = false, force = true)
+                    return@withContext false
+                }
+            }
+
             // Check if this file is a GZIP/XZ tarball or a ZIP archive
             var innerZipFound: File? = null
             var isDebsOnlyArchive = false
@@ -1308,43 +1345,6 @@ object LocalEnvironmentManager {
                 inner
             } else {
                 tempZipFile
-            }
-
-            // Do not load original com.termux binaries into an incompatible app prefix.
-            if (isStandalonePackage(appContext)) {
-                val correctArchive = try {
-                    java.util.zip.ZipFile(tempZipFile).use { archive ->
-                        val marker = archive.getEntry("antigem-native.json")
-                        val inner = archive.getEntry("bootstrap-aarch64.zip")
-                        if (marker == null || inner == null) false else {
-                            val metadata = archive.getInputStream(marker).bufferedReader().use { it.readText() }
-                            val parsed = org.json.JSONObject(metadata)
-                            val expectedSha = parsed.optString("bootstrap_sha256")
-                            val digest = java.security.MessageDigest.getInstance("SHA-256")
-                            archive.getInputStream(inner).use { input ->
-                                val buffer = ByteArray(65536)
-                                while (true) {
-                                    val n = input.read(buffer)
-                                    if (n == -1) break
-                                    digest.update(buffer, 0, n)
-                                }
-                            }
-                            val actualSha = digest.digest().joinToString("") { "%02x".format(it) }
-                            parsed.optString("package_id") == appContext.packageName &&
-                                parsed.optString("architecture") == "aarch64" &&
-                                parsed.optString("prefix") == "/data/data/com.antigem.shell/files/usr" &&
-                                expectedSha.length == 64 && expectedSha.equals(actualSha, ignoreCase = true)
-                        }
-                    }
-                } catch (_: Exception) { false }
-                if (getBootstrapArch() != "aarch64" || !correctArchive) {
-                    tempZipFile.delete()
-                    val errorMsg = "Incompatible bootstrap. Requires aarch64 archive built for com.antigem.shell; original com.termux ZIP cannot be used."
-                    log("❌ "+errorMsg)
-                    _installerState.value = LocalInstallerState.Error(errorMessage = errorMsg, canRetry = true)
-                    updateInstallNotification(appContext, "Installation Failed", errorMsg, -2, ongoing = false, force = true)
-                    return@withContext false
-                }
             }
 
             // STEP 2: Extract verified bootstrap archive
