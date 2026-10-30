@@ -56,6 +56,14 @@ android {
             buildConfigField("int", "HUB_PORT", "1235")
             buildConfigField("int", "BROWSER_MCP_PORT", "8765")
         }
+        // Isolated native Termux-compatible environment; does not replace the user's Termux app.
+        create("standalone") {
+            dimension = "mode"
+            applicationId = "com.antigem.native"
+            buildConfigField("int", "BRIDGE_PORT", "2234")
+            buildConfigField("int", "HUB_PORT", "2235")
+            buildConfigField("int", "BROWSER_MCP_PORT", "9765")
+        }
     }
 
     buildTypes {
