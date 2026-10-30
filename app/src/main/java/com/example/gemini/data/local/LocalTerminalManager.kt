@@ -1226,7 +1226,7 @@ object LocalTerminalManager {
 
     fun autoLaunchServerIfReady(context: Context) {
         val pkg = context.packageName
-        val isTermux = pkg == "com.termux" || pkg.contains("termux")
+        val isTermux = LocalEnvironmentManager.isTermuxPackage(context)
         if (!isTermux) return
 
         if (!LocalEnvironmentManager.isInstalled(context)) {
