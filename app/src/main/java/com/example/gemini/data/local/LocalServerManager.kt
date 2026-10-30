@@ -65,8 +65,18 @@ object LocalServerManager {
         val targetFile = File(binDir, targetFileName)
         context.assets.open("bin/$assetName").use { input ->
             val tempFile = File(binDir, "$targetFileName.tmp")
+            // Text backup/restore scripts must use this app's private files directory.
+            // Never rewrite ELF binaries: byte substitution corrupts compiled code.
+            val isNativeScript = context.packageName == "com.antigem.shell" &&
+                targetFileName in setOf("backup_bootstrap", "backup_chats", "restore_chats", "backup_projects", "restore_projects")
             tempFile.outputStream().use { output ->
-                input.copyTo(output)
+                if (isNativeScript) {
+                    val script = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    val canonical = "/data/data/" + context.packageName + "/files"
+                    output.write(script.replace("/data/data/com.termux/files", canonical).toByteArray(Charsets.UTF_8))
+                } else {
+                    input.copyTo(output)
+                }
             }
             tempFile.setExecutable(true, false)
             tempFile.setReadable(true, false)
