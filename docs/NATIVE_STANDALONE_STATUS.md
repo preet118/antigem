@@ -18,6 +18,16 @@ Build a new Android package `com.antigem.shell` that runs an **independently own
 - Added a Linux/Docker helper for re-building a custom Termux bootstrap and Python packaging helper.
 - Added Android debug build workflow.
 
+## Additional patches made during review
+
+- Fixed an installer ordering bug: package-specific outer ZIP validation now runs **before** the installer deletes the outer ZIP when unwrapping a nested bootstrap.
+- Fixed native AGY/Go Bridge/Claude binary default paths in AuthPreferences.
+- Rewrites only the copied **text** backup/restore scripts to use the new app-owned prefix, leaving executable binaries untouched.
+- Prevents custom standalone from offering an upstream **standard** APK as an update until a signed custom update channel is operational.
+- Added read-only `scripts/native_feature_smoke.sh` for command-line smoke checks on Android.
+- Added `scripts/audit_original_rootfs.py` and `.github/workflows/audit-original-rootfs.yml` to inventory official source ZIP contents before claiming feature parity.
+- GitHub Actions has **not** run on this branch yet; there is no proven successful APK or runtime bootstrap from these changes.
+
 ## Still required before this project can be called complete
 
 1. Build aarch64 Termux packages **from source for the new prefix**. Stock Termux package repository is compiled for `com.termux`, so updating packages from stock mirrors would break this standalone. A compatible custom package repository (or locked prebuilt base) is needed.
