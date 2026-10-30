@@ -23,6 +23,8 @@ apt-get install -y --no-install-recommends \
 # Python's system site-packages are externally managed; install skill/MCP dependencies in a venv.
 python3 -m venv /root/.venvs/workspace
 /root/.venvs/workspace/bin/python -m pip install --disable-pip-version-check --no-cache-dir --upgrade pip setuptools wheel
+# Common MCP server runtimes (users can add individual MCP servers later).
+/root/.venvs/workspace/bin/python -m pip install --disable-pip-version-check --no-cache-dir mcp uv requests pyyaml
 
 # Familiar CLI names used by AntiGem's run configurations and agents.
 if ! command -v lua >/dev/null 2>&1; then
@@ -43,7 +45,7 @@ curl -fLsS --retry 3 "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERS
 tar -xJf /tmp/antigem-node.tar.xz -C /usr/local --strip-components=1
 node --version
 npm --version
-npm install -g --no-audit --no-fund typescript tsx @anthropic-ai/claude-code@2.1.112
+npm install -g --no-audit --no-fund typescript tsx @modelcontextprotocol/sdk@1 @anthropic-ai/claude-code@2.1.112
 mkdir -p /root/.local/bin
 curl -fLsS --retry 3 https://antigravity.google/cli/install.sh -o /tmp/antigem-agy-install.sh
 bash /tmp/antigem-agy-install.sh
@@ -71,6 +73,8 @@ When asked to inspect a project, first list its files and read manifest files.
 Never run destructive commands. Check the available tooling before suggesting tests.
 Ask permission before installing dependencies or changing project files.
 EOF
+mkdir -p /root/.agents/skills/project-check
+cp /root/.claude/skills/project-check/SKILL.md /root/.agents/skills/project-check/SKILL.md
 
 # Remove build caches and temporary credential-free installers.
 rm -f /tmp/antigem-node.tar.xz /tmp/antigem-agy-install.sh
