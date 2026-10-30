@@ -209,6 +209,7 @@ class LocalPtySession(
                 }
                 File(ubuntuDir, context.filesDir.absolutePath.removePrefix("/")).mkdirs()
                 File(ubuntuDir, "root/workspace").mkdirs()
+                File(ubuntuDir, "antigem/bin").mkdirs()
                 LocalEnvironmentManager.setupProotDistroUbuntuFixups(context, ubuntuDir)
 
                 val envWrapper = listOf(
