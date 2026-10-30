@@ -38,7 +38,10 @@ AntiGem comes in two build variants:
 | Variant | Package ID (`applicationId`) | Recommended? | How it works |
 | :--- | :--- | :---: | :--- |
 | **`termux`** | `com.termux` | **✅ Yes (Recommended)** | **All-in-one standalone environment.** You do **not** need Termux installed. The app natively runs its own full Linux environment, package manager (`apt`/`pkg`), shell, and binaries inside its own private sandbox. |
-| **`standard`** | `com.antigem` | Optional | Requires the standalone **Termux** app installed on your phone. You run `agy_ide_bridge` inside Termux and connect the AntiGem app to it over localhost. *(Note: PRoot is not used for now).* |
+| **`standard`** | `com.antigem` | Optional (new full Ubuntu candidate in this fork) | Uses its own Ubuntu ARM64 PRoot environment and prebuilt Go IDE bridge, so the external Termux app is **not required**. Android agent/MCP features still require device testing. |
+
+> [!IMPORTANT]
+> Full Ubuntu workspace development is on `feature/ubuntu-full-workspace`. The APK and updated rootfs require CI and device tests. Keep the external Termux app and its data intact. See [Full Ubuntu Workspace](docs/FULL_UBUNTU_WORKSPACE.md).
 
 > [!TIP]
 > **Download Note:** For the latest releases, we primarily build and publish the **`termux`** flavor (`antiGem-termux-v*-release.apk`). If you specifically prefer the `standard` variant, you can find older releases or easily fork the repository and build your own APK using Gradle or GitHub Actions.
