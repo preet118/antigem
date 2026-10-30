@@ -125,7 +125,7 @@ android {
 }
 
 // Reuse the already-tested Standard PRoot/loader assets for the isolated Full flavor.
-android.sourceSets.getByName("full").assets.srcDir(layout.projectDirectory.dir("src/standard/assets"))
+android.sourceSets.getByName("full").assets.srcDir(layout.projectDirectory.dir("src/standard/assets").asFile)
 
 kotlin {
     jvmToolchain(21)
