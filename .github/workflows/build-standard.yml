@@ -3,6 +3,9 @@ name: Build AntiGem Standard APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - fix/ubuntu-26-claude-antigravity
   push:
     branches:
       - fix/ubuntu-26-claude-antigravity
