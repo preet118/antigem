@@ -33,6 +33,10 @@ jobs:
         with:
           go-version-file: agy_ide_bridge/go.mod
       - uses: android-actions/setup-android@v3
+      - name: Validate native build scripts
+        run: |
+          bash -n scripts/build_native_bootstrap.sh
+          python3 -m py_compile scripts/package_native_bootstrap.py
       - name: Install Android SDK
         run: |
           yes | sdkmanager --licenses >/dev/null || true
