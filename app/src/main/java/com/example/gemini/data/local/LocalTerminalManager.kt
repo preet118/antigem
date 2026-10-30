@@ -173,7 +173,10 @@ class LocalPtySession(
                     "--bind=/dev/urandom:/dev/random",
                     "--bind=${shmDir.absolutePath}:/dev/shm",
                     "--bind=${prootTmpDir.absolutePath}:/tmp",
-                    "--bind=${LocalEnvironmentManager.getBinDir(context).absolutePath}:/antigem/bin"
+                    "--bind=${LocalEnvironmentManager.getBinDir(context).absolutePath}:/antigem/bin",
+                    // The IDE uses absolute app-private project paths. Expose only this app\'s files.
+                    "--bind=${context.filesDir.absolutePath}:${context.filesDir.absolutePath}",
+                    "--bind=${homeDir.absolutePath}:/root/workspace"
                 )
                 for ((fakeFile, guestPath) in sysdataBindings) {
                     prootArgs.add("--bind=${fakeFile.absolutePath}:$guestPath")
@@ -204,6 +207,8 @@ class LocalPtySession(
                 } else if (File("/sdcard").exists()) {
                     prootArgs.add("--bind=/sdcard")
                 }
+                File(ubuntuDir, context.filesDir.absolutePath.removePrefix("/")).mkdirs()
+                File(ubuntuDir, "root/workspace").mkdirs()
                 LocalEnvironmentManager.setupProotDistroUbuntuFixups(context, ubuntuDir)
 
                 val envWrapper = listOf(
