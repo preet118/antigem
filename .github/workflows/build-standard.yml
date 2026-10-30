@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
-          if [ "$GITHUB_REF" = "refs/heads/feature/ubuntu-full-workspace" ]; then
+          if [ "$GITHUB_REF" = "refs/heads/feature/ubuntu-full-workspace" ] || [ "${GITHUB_HEAD_REF:-}" = "feature/ubuntu-full-workspace" ]; then
             ./gradlew :app:assembleFullDebug --no-daemon --stacktrace
           else
             ./gradlew :app:assembleStandardDebug --no-daemon --stacktrace
@@ -64,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p output
-          if [ "$GITHUB_REF" = "refs/heads/feature/ubuntu-full-workspace" ]; then
+          if [ "$GITHUB_REF" = "refs/heads/feature/ubuntu-full-workspace" ] || [ "${GITHUB_HEAD_REF:-}" = "feature/ubuntu-full-workspace" ]; then
             cp app/build/outputs/apk/full/debug/*.apk output/AntiGem-Full-Ubuntu-34.apk
           else
             cp app/build/outputs/apk/standard/debug/*.apk output/AntiGem-Standard.apk
@@ -82,7 +82,7 @@ jobs:
   # One manual launch of the existing #33 workflow on the full branch can build
   # the independent APK, then build and publish the matching ARM64 rootfs.
   full-ubuntu-rootfs:
-    if: github.ref == 'refs/heads/feature/ubuntu-full-workspace'
+    if: github.ref == 'refs/heads/feature/ubuntu-full-workspace' || github.head_ref == 'feature/ubuntu-full-workspace'
     needs: build
     uses: ./.github/workflows/build-preconfigured-ubuntu.yml
     permissions:
