@@ -2437,6 +2437,7 @@ All files created here persist inside the application.
             val prootBin = getProotBinaryPath(context)
             val ubuntuDir = getUbuntuRootDir(context)
             val homeDir = getHomeDir(context)
+            getBinDir(context).mkdirs() // PRoot bind source exists even before the Go bridge is extracted.
             val prootTmpDir = File(context.filesDir, "tmp").apply {
                 mkdirs()
                 try { Os.chmod(absolutePath, 511) } catch (_: Exception) {}
