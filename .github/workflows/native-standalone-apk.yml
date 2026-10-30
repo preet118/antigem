@@ -14,6 +14,9 @@ on:
       - 'settings.gradle.kts'
       - 'version.json'
       - 'scripts/**'
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
