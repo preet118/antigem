@@ -55,7 +55,7 @@ jobs:
           sudo chroot /tmp/antigem-ubuntu-root /usr/bin/dpkg-query -W > package-inventory.tsv
           sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root /usr/local/bin/node --version > runtime-versions.txt
           sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root /root/.local/bin/agy --version >> runtime-versions.txt
-          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root /usr/local/bin/claude --version >> runtime-versions.txt
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root /root/.local/bin/claude --version >> runtime-versions.txt
           wc -l package-inventory.tsv
       - name: Sanitize and compress preconfigured rootfs
         shell: bash
