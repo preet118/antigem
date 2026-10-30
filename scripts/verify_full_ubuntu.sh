@@ -6,11 +6,12 @@ export PATH="/root/.local/bin:/root/.venvs/workspace/bin:/usr/local/sbin:/usr/lo
 for executable in \
   bash curl python3 pip git git-lfs gcc g++ clang cmake make ninja \
   go javac java rustc cargo node npm npx tsx tsc \
-  php ruby lua Rscript kotlinc zip unzip tar ssh \
+  php ruby lua Rscript kotlinc zip unzip tar ssh uv uvx \
   jq rg fd agy claude; do
   command -v "$executable" >/dev/null || { echo "MISSING: $executable" >&2; exit 30; }
 done
 python3 -c 'import json,venv,ssl,sqlite3,subprocess,sys; assert sys.version_info.major == 3'
+/root/.venvs/workspace/bin/python -c 'import mcp,requests,yaml; assert requests.__version__'
 /root/.venvs/workspace/bin/python -m pip --version
 node -e 'if (!process.versions.node) process.exit(1)'
 npm --version
@@ -33,7 +34,7 @@ tsc --version
 agy --version
 claude --version
 test -s /root/.claude/skills/project-check/SKILL.md
-test -d /root/.agents/skills
+test -f /root/.agents/skills/project-check/SKILL.md
 test -d /root/.cache/antigem-artifacts
 test -d /root/projects
 git lfs version
