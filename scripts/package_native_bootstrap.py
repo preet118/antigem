@@ -12,8 +12,8 @@ import pathlib
 import tempfile
 import zipfile
 
-EXPECTED_PACKAGE = "com.antigem.native"
-EXPECTED_PREFIX = "/data/data/com.antigem.native/files/usr"
+EXPECTED_PACKAGE = "com.antigem.shell"
+EXPECTED_PREFIX = "/data/data/com.antigem.shell/files/usr"
 OLD_PREFIX = b"/data/data/com.termux/files/usr"
 
 def digest_file(path):
