@@ -40,6 +40,15 @@ Published full release tag **after CI + manual dispatch**:
 
 Important: the app's automatic download **will fail** until the new release is genuinely published. It must not silently fall back to a partial / original Termux ZIP.
 
+## GitHub Actions build #34 — 30 October 2026
+
+- [Build #34](https://github.com/preet118/antigem/actions/runs/41035247371): full-flavor Android APK **built successfully** (`AntiGem-Full-Ubuntu-34-APK`, artifact `12968257182`).
+- Ubuntu ARM64 rootfs provisioning failed during `apt install` with exit status 100. Log: `the java command requires a mounted proc fs (/proc)`; Java 21/Kotlin packaging consequently failed.
+- **Fixed in subsequent source commit:** bind-mount the GitHub runner's `/proc` before ARM64 chroot provisioning, unmount it **before** archiving to avoid bundling host process metadata, and clean up on failure.
+- Also granted workflow permissions to publish the final prerelease only after tests pass.
+- **Build #34 did not include the fixes.** Re-running old failed jobs uses the old commit and will not apply them. Start a **new** workflow dispatch on `feature/ubuntu-full-workspace`.
+- The full Ubuntu rootfs release is not yet available; do not claim the uploaded APK alone is production-ready.
+
 ## Coverage and remaining acceptance tests
 
 | Feature | Source / provisioning | Still needs on-device test |
