@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKDIR="${NATIVE_WORKDIR:-$ROOT/.native-work}"
 REPO="$WORKDIR/termux-packages"
-PACKAGE_NAME="com.antigem.native"
+PACKAGE_NAME="com.antigem.shell"
 AGY_BIN="${AGY_BIN:-}"
 OUT="$ROOT/output/native-bootstrap"
 mkdir -p "$WORKDIR" "$OUT"
