@@ -45,7 +45,11 @@ curl -fLsS --retry 3 "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERS
 tar -xJf /tmp/antigem-node.tar.xz -C /usr/local --strip-components=1
 node --version
 npm --version
-npm install -g --no-audit --no-fund typescript tsx @modelcontextprotocol/sdk@1 @anthropic-ai/claude-code@2.1.112
+npm install -g --no-audit --no-fund typescript tsx @modelcontextprotocol/sdk@1
+# AntiGem's bundled bridge explicitly looks for /root/.local/bin/claude.
+mkdir -p /root/.local
+npm install -g --prefix /root/.local --no-audit --no-fund @anthropic-ai/claude-code@2.1.112
+test -x /root/.local/bin/claude
 mkdir -p /root/.local/bin
 curl -fLsS --retry 3 https://antigravity.google/cli/install.sh -o /tmp/antigem-agy-install.sh
 bash /tmp/antigem-agy-install.sh
