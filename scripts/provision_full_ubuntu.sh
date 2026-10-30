@@ -11,7 +11,7 @@ apt-get install -y --no-install-recommends \
   bash ca-certificates curl wget openssl gnupg \
   procps psmisc lsof iproute2 net-tools \
   xz-utils bzip2 gzip tar zip unzip p7zip-full rsync \
-  nano vim-tiny less file jq ripgrep fd-find \
+  nano vim-tiny less file jq ripgrep fd-find tmux zsh screen sqlite3 \
   git git-lfs openssh-client \
   python3 python3-pip python3-venv python3-dev python-is-python3 \
   build-essential clang cmake ninja-build pkg-config \
