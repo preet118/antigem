@@ -1,0 +1,30 @@
+name: Audit Original AntiGem Rootfs (read-only)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-rootfs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch developer's original bootstrap
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 20 \
+            --output original-antigem-rootfs.zip \
+            https://github.com/Santoshkurmi/antigem/releases/download/rootfs-v1/bootrapz_2026-10-04.zip
+          test "$(stat -c%s original-antigem-rootfs.zip)" -gt 300000000
+          sha256sum original-antigem-rootfs.zip
+      - name: Inventory tools, nested zips and hardcoded paths
+        run: |
+          python3 scripts/audit_original_rootfs.py original-antigem-rootfs.zip --output rootfs-audit.json
+          python3 -m json.tool rootfs-audit.json >/dev/null
+      - name: Upload inventory report (not executable assets)
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-antigem-rootfs-inventory
+          path: rootfs-audit.json
+          if-no-files-found: error

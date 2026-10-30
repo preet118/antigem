@@ -1,0 +1,72 @@
+name: AntiGem Native Standalone (build only)
+
+on:
+  push:
+    branches:
+      - fix/native-standalone-coexist
+    paths:
+      - 'app/**'
+      - 'agy_ide_bridge/**'
+      - '.github/workflows/native-standalone-apk.yml'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'version.json'
+      - 'scripts/**'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-standalone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agy_ide_bridge/go.mod
+      - uses: android-actions/setup-android@v3
+      - name: Validate native build scripts
+        run: |
+          bash -n scripts/build_native_bootstrap.sh
+          python3 -m py_compile scripts/package_native_bootstrap.py
+      - name: Record remaining hard-coded Termux dependencies
+        run: |
+          (grep -RnE '/data/(data|user/0)/com[.]termux|com[.]termux/com[.]example' app/src/main agy_ide_bridge scripts || true) > native-prefix-audit.txt
+          echo "Remaining code references (review before device release):" >> "$GITHUB_STEP_SUMMARY"
+          echo "$(wc -l < native-prefix-audit.txt) potential references" >> "$GITHUB_STEP_SUMMARY"
+          head -60 native-prefix-audit.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload native path audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-prefix-audit
+          path: native-prefix-audit.txt
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Build isolated APK (not a verified complete environment)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleStandaloneDebug --no-daemon --stacktrace
+      - name: Verify output
+        run: |
+          set -eu
+          find app/build/outputs/apk/standalone/debug -name '*.apk' -type f -size +1M -print -quit | grep .
+          sha256sum app/build/outputs/apk/standalone/debug/*.apk
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: antigem-native-standalone-UNVERIFIED-APK
+          path: app/build/outputs/apk/standalone/debug/*.apk
+          if-no-files-found: error

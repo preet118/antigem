@@ -389,13 +389,13 @@ fun FullScreenLocalToolsInstaller(
                                                 .background(QuotaGreen.copy(alpha = 0.15f))
                                                 .padding(horizontal = 5.dp, vertical = 1.dp)
                                         ) {
-                                            Text(if (isTermux) "Official" else "Recommended", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = QuotaGreen)
+                                            Text(if (LocalEnvironmentManager.isStandalonePackage(context)) "Custom Build" else if (isTermux) "Official" else "Recommended", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = QuotaGreen)
                                         }
                                     }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = if (isTermux) {
-                                            "Downloads verified Termux rootfs (~350MB) with preconfigured tools and environment."
+                                            if (LocalEnvironmentManager.isStandalonePackage(context)) "Requires a custom bootstrap built for com.antigem.shell; original com.termux archives are rejected." else "Downloads verified Termux rootfs (~350MB) with preconfigured tools and environment."
                                         } else {
                                             "Downloads official minimal Ubuntu ARM64 rootfs container with glibc, bash, and development tools."
                                         },
@@ -472,7 +472,7 @@ fun FullScreenLocalToolsInstaller(
                         }
 
                         // Option 1: Base Minimum Termux (Termux build only)
-                        if (isTermux) {
+                        if (isTermux && !LocalEnvironmentManager.isStandalonePackage(context)) {
                             Surface(
                                 shape = RoundedCornerShape(14.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -886,7 +886,7 @@ fun FullScreenLocalToolsInstaller(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = when (selectedSourceType) {
-                                0 -> if (isTermux) "Download & Install AntiGem (~350MB)" else "Download & Install Ubuntu Base"
+                                0 -> if (LocalEnvironmentManager.isStandalonePackage(context)) "Install Native Bootstrap" else if (isTermux) "Download & Install AntiGem (~350MB)" else "Download & Install Ubuntu Base"
                                 1 -> "Download Base Termux (~33MB)"
                                 else -> if (selectedFileUri != null) "Install Local ZIP" else "Choose ZIP File"
                             },
