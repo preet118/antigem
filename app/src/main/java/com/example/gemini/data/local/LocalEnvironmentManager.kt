@@ -2695,6 +2695,30 @@ All files created here persist inside the application.
         args: List<String> = emptyList(),
         onLogLine: (String) -> Unit
     ): LocalCommandResult = withContext(Dispatchers.IO) {
+        // Standard APK uses Ubuntu PRoot, not a native /data/data/com.termux shell.
+        if (!isTermuxPackage(context) && isUbuntuInstalled(context)) {
+            if (!scriptName.matches(Regex("[A-Za-z0-9_-]+"))) {
+                val msg = "Invalid script name"
+                withContext(Dispatchers.Main) { onLogLine(msg) }
+                return@withContext LocalCommandResult(1, msg, 0)
+            }
+            val ubuntuScriptName = if (scriptName == "backup_bootstrap") "backup_proot_ubuntu" else scriptName
+            val scriptFile = File(getBinDir(context), ubuntuScriptName)
+            if (!scriptFile.isFile) {
+                val msg = "Backup script not available in app: $ubuntuScriptName"
+                withContext(Dispatchers.Main) { onLogLine(msg) }
+                return@withContext LocalCommandResult(1, msg, 0)
+            }
+            val safeArgs = args.joinToString(" ") { arg -> "'" + arg.replace("'", "'\\''") + "'" }
+            val result = executeCommand(
+                command = "bash /antigem/bin/$ubuntuScriptName $safeArgs",
+                context = context,
+                timeoutSeconds = 3600
+            )
+            // The generic Ubuntu executor currently captures output before returning.
+            withContext(Dispatchers.Main) { result.output.lineSequence().forEach(onLogLine) }
+            return@withContext result
+        }
         val startTime = System.currentTimeMillis()
         val binDir = getBinDir(context)
         val prefixDir = getPrefixDir(context)
