@@ -82,6 +82,12 @@ class AppUpdateManager(private val context: Context) {
             }
             val isCritical = json.optBoolean("is_critical", false) || (BuildConfig.VERSION_CODE < minSupportedCode)
 
+            // Custom standalone must never install upstream "standard" APK.
+            // Enable updates only after verified, correctly signed fork releases exist.
+            if (context.packageName == "com.antigem.shell") {
+                return@withContext Result.success(null)
+            }
+
             // Auto-generate package-specific download URL based on remote version name and flavor
             val currentPkg = context.packageName
             val flavorType = if (currentPkg == "com.termux") "termux" else "standard"
