@@ -66,7 +66,7 @@ object LocalServerManager {
         context.assets.open("bin/$assetName").use { input ->
             val tempFile = File(binDir, "$targetFileName.tmp")
             tempFile.outputStream().use { output ->
-                val isUbuntuBackupScript = context.packageName == "com.antigem" &&
+                val isUbuntuBackupScript = context.packageName in setOf("com.antigem", "com.antigem.full") &&
                     targetFileName in setOf("backup_bootstrap", "backup_chats", "restore_chats", "backup_projects", "restore_projects")
                 if (isUbuntuBackupScript) {
                     // These bundled scripts were originally authored for the com.termux prefix.
