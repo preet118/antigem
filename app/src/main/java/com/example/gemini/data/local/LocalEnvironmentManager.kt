@@ -2406,7 +2406,10 @@ All files created here persist inside the application.
                 "--bind=/sys",
                 "--bind=/dev/urandom:/dev/random",
                 "--bind=${shmDir.absolutePath}:/dev/shm",
-                "--bind=${prootTmpDir.absolutePath}:/tmp"
+                "--bind=${prootTmpDir.absolutePath}:/tmp",
+                "--bind=${getBinDir(context).absolutePath}:/antigem/bin",
+                // IDE project paths are app-private Android absolute paths, not /root paths.
+                "--bind=${context.filesDir.absolutePath}:${context.filesDir.absolutePath}"
             )
             for ((fakeFile, guestPath) in sysdataBindings) {
                 cmdList.add("--bind=${fakeFile.absolutePath}:$guestPath")
@@ -2440,6 +2443,9 @@ All files created here persist inside the application.
                 cmdList.add("-b")
                 cmdList.add("/sdcard")
             }
+            File(ubuntuDir, context.filesDir.absolutePath.removePrefix("/")).mkdirs()
+            File(ubuntuDir, "root/workspace").mkdirs()
+            File(ubuntuDir, "antigem/bin").mkdirs()
             cmdList.addAll(
                 listOf(
                     "-b", "${homeDir.absolutePath}:/root/workspace",
