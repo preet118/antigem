@@ -61,6 +61,12 @@ object LocalEnvironmentManager {
     // Minimum 10 MB required for a real Termux bootstrap archive
     private const val MIN_BOOTSTRAP_SIZE_BYTES = 10 * 1024 * 1024L
 
+    // Only accept bootstraps compiled for this app package.
+    const val STANDALONE_ROOTFS_URL = "https://github.com/preet118/antigem/releases/download/native-rootfs-v1/antigem-native-bootstrap-aarch64.zip"
+    const val STANDALONE_ROOTFS_TAG = "native-rootfs-v1"
+    const val STANDALONE_ROOTFS_ASSET = "antigem-native-bootstrap-aarch64.zip"
+    const val STANDALONE_ROOTFS_ESTIMATE_BYTES = 350 * 1024 * 1024L
+
     const val HARDCODED_ROOTFS_URL = "https://github.com/Santoshkurmi/antigem/releases/download/rootfs-v1/bootrapz_2026-10-04.zip"
     const val HARDCODED_ROOTFS_TAG = "rootfs-v1"
     const val HARDCODED_ROOTFS_ASSET = "bootrapz_2026-10-04.zip"
@@ -172,7 +178,8 @@ object LocalEnvironmentManager {
     fun getHomeDir(context: Context): File = File(context.filesDir, "home")
     fun getProjectsDir(context: Context): File = File(getHomeDir(context), "projects")
     fun getUbuntuRootDir(context: Context): File = File(context.filesDir, "ubuntu")
-    fun isTermuxPackage(context: Context): Boolean = context.packageName == "com.termux"
+    fun isStandalonePackage(context: Context): Boolean = context.packageName == "com.antigem.native"
+    fun isTermuxPackage(context: Context): Boolean = context.packageName == "com.termux" || isStandalonePackage(context)
 
     fun ensureProotExtracted(context: Context): String {
         val binDir = File(context.filesDir, "bin")
@@ -583,7 +590,7 @@ object LocalEnvironmentManager {
             if (!libexecDir.exists()) libexecDir.mkdirs()
             val dispatcherFile = File(libexecDir, "termux-api")
             val scriptContent = """
-                #!/data/data/com.termux/files/usr/bin/bash
+                #!${getBinDir(context).absolutePath}/bash
                 METHOD="${'$'}1"
                 shift
 
@@ -595,13 +602,13 @@ object LocalEnvironmentManager {
                     fi
                 fi
 
-                TMP_DIR="${'$'}{TMPDIR:-/data/data/com.termux/files/usr/tmp}"
+                TMP_DIR="${'$'}{TMPDIR:-${getTmpDir(context).absolutePath}}"
                 mkdir -p "${'$'}TMP_DIR"
                 TMP_OUT="${'$'}TMP_DIR/api_out.${'$'}${'$'}"
 
                 am broadcast --user 0 \
                     -a "com.termux.api" \
-                    -n "com.termux/com.example.gemini.data.receiver.TermuxApiReceiver" \
+                    -n "${context.packageName}/com.example.gemini.data.receiver.TermuxApiReceiver" \
                     --es "api_method" "${'$'}METHOD" \
                     --es "socket_output" "${'$'}TMP_OUT" \
                     "${'$'}{EXTRA_ARGS[@]}" \
@@ -723,7 +730,17 @@ object LocalEnvironmentManager {
         val arch = getBootstrapArch()
         val packageName = context.packageName
         val isTermux = isTermuxPackage(context)
-        val info = if (isTermux) {
+        val info = if (isStandalonePackage(context)) {
+            DiscoveredPackageInfo(
+                url = STANDALONE_ROOTFS_URL,
+                releaseTag = STANDALONE_ROOTFS_TAG,
+                assetName = STANDALONE_ROOTFS_ASSET,
+                arch = "aarch64",
+                sizeBytes = STANDALONE_ROOTFS_ESTIMATE_BYTES,
+                sizeFormatted = "custom native bootstrap",
+                packageName = packageName
+            )
+        } else if (isTermux) {
             DiscoveredPackageInfo(
                 url = HARDCODED_ROOTFS_URL,
                 releaseTag = HARDCODED_ROOTFS_TAG,
@@ -878,9 +895,10 @@ object LocalEnvironmentManager {
             when (source) {
                 is BootstrapSource.Auto -> {
                     val isTermux = isTermuxPackage(appContext)
-                    val targetUrl = if (isTermux) HARDCODED_ROOTFS_URL else UBUNTU_ROOTFS_URL
-                    val targetAsset = if (isTermux) HARDCODED_ROOTFS_ASSET else UBUNTU_ROOTFS_ASSET
-                    val targetSizeBytes = if (isTermux) HARDCODED_ROOTFS_SIZE_BYTES else UBUNTU_ROOTFS_SIZE_BYTES
+                    val isStandalone = isStandalonePackage(appContext)
+                    val targetUrl = if (isStandalone) STANDALONE_ROOTFS_URL else if (isTermux) HARDCODED_ROOTFS_URL else UBUNTU_ROOTFS_URL
+                    val targetAsset = if (isStandalone) STANDALONE_ROOTFS_ASSET else if (isTermux) HARDCODED_ROOTFS_ASSET else UBUNTU_ROOTFS_ASSET
+                    val targetSizeBytes = if (isStandalone) STANDALONE_ROOTFS_ESTIMATE_BYTES else if (isTermux) HARDCODED_ROOTFS_SIZE_BYTES else UBUNTU_ROOTFS_SIZE_BYTES
                     val titlePrefix = if (isTermux) "AntiGem Rootfs" else "Ubuntu Rootfs"
 
                     _installerState.value = LocalInstallerState.Downloading(
@@ -1289,6 +1307,29 @@ object LocalEnvironmentManager {
                 tempZipFile
             }
 
+            // Do not load original com.termux binaries into an incompatible app prefix.
+            if (isStandalonePackage(appContext)) {
+                val correctArchive = try {
+                    java.util.zip.ZipFile(tempZipFile).use { archive ->
+                        val marker = archive.getEntry("antigem-native.json")
+                        val inner = archive.getEntry("bootstrap-aarch64.zip")
+                        if (marker == null || inner == null) false else {
+                            val metadata = archive.getInputStream(marker).bufferedReader().use { it.readText() }
+                            val parsed = org.json.JSONObject(metadata)
+                            parsed.optString("package_id") == appContext.packageName && parsed.optString("architecture") == "aarch64"
+                        }
+                    }
+                } catch (_: Exception) { false }
+                if (getBootstrapArch() != "aarch64" || !correctArchive) {
+                    tempZipFile.delete()
+                    val errorMsg = "Incompatible bootstrap. Requires aarch64 archive built for com.antigem.native; original com.termux ZIP cannot be used."
+                    log("❌ "+errorMsg)
+                    _installerState.value = LocalInstallerState.Error(errorMessage = errorMsg, canRetry = true)
+                    updateInstallNotification(appContext, "Installation Failed", errorMsg, -2, ongoing = false, force = true)
+                    return@withContext false
+                }
+            }
+
             // STEP 2: Extract verified bootstrap archive
             val archiveFormatName = if (isXzTar) "XZ" else if (isGzipTar) "GZIP" else if (isDebsOnlyArchive) "DEB" else "ZIP"
             log("Archive ready: ${formatFileSize(archiveToExtract.length())}, format=$archiveFormatName")
@@ -1691,8 +1732,13 @@ object LocalEnvironmentManager {
             )
             log("Verification output: ${testRes.output.trim()}")
 
-            if (!testRes.output.contains("GEMINI_LOCAL_TOOLS_OK")) {
-                val errorMsg = "Shell verification test failed: ${testRes.output}"
+            val nativeFeatureCheck = if (isStandalonePackage(appContext)) executeCommand(
+                command = "test \"\$PREFIX\" = \"/data/data/com.antigem.native/files/usr\" && for tool in bash python3 node npm git clang agy apt pkg; do command -v \"\$tool\" >/dev/null || exit 31; done && echo ANTIGEM_NATIVE_TOOLS_OK",
+                context = appContext
+            ) else null
+            if (!testRes.output.contains("GEMINI_LOCAL_TOOLS_OK") || testRes.exitCode != 0 ||
+                (nativeFeatureCheck != null && (nativeFeatureCheck.exitCode != 0 || !nativeFeatureCheck.output.contains("ANTIGEM_NATIVE_TOOLS_OK")))) {
+                val errorMsg = "Shell verification test failed: ${testRes.output}; native tools: ${nativeFeatureCheck?.output ?: "not applicable"}"
                 log("❌ $errorMsg")
                 cleanupFailedInstall(appContext, authPreferences)
                 updateInstallNotification(appContext, "Installation Failed", errorMsg, -2, ongoing = false, force = true)
