@@ -181,7 +181,7 @@ object LocalEnvironmentManager {
     fun getHomeDir(context: Context): File = File(getLinuxFilesRoot(context), "home")
     fun getProjectsDir(context: Context): File = File(getHomeDir(context), "projects")
     fun getUbuntuRootDir(context: Context): File = File(context.filesDir, "ubuntu")
-    fun isStandalonePackage(context: Context): Boolean = context.packageName == "com.antigem.native"
+    fun isStandalonePackage(context: Context): Boolean = context.packageName == "com.antigem.shell"
     fun isTermuxPackage(context: Context): Boolean = context.packageName == "com.termux" || isStandalonePackage(context)
 
     fun ensureProotExtracted(context: Context): String {
@@ -1332,14 +1332,14 @@ object LocalEnvironmentManager {
                             val actualSha = digest.digest().joinToString("") { "%02x".format(it) }
                             parsed.optString("package_id") == appContext.packageName &&
                                 parsed.optString("architecture") == "aarch64" &&
-                                parsed.optString("prefix") == "/data/data/com.antigem.native/files/usr" &&
+                                parsed.optString("prefix") == "/data/data/com.antigem.shell/files/usr" &&
                                 expectedSha.length == 64 && expectedSha.equals(actualSha, ignoreCase = true)
                         }
                     }
                 } catch (_: Exception) { false }
                 if (getBootstrapArch() != "aarch64" || !correctArchive) {
                     tempZipFile.delete()
-                    val errorMsg = "Incompatible bootstrap. Requires aarch64 archive built for com.antigem.native; original com.termux ZIP cannot be used."
+                    val errorMsg = "Incompatible bootstrap. Requires aarch64 archive built for com.antigem.shell; original com.termux ZIP cannot be used."
                     log("❌ "+errorMsg)
                     _installerState.value = LocalInstallerState.Error(errorMessage = errorMsg, canRetry = true)
                     updateInstallNotification(appContext, "Installation Failed", errorMsg, -2, ongoing = false, force = true)
@@ -1750,7 +1750,7 @@ object LocalEnvironmentManager {
             log("Verification output: ${testRes.output.trim()}")
 
             val nativeFeatureCheck = if (isStandalonePackage(appContext)) executeCommand(
-                command = "test \"\$PREFIX\" = \"/data/data/com.antigem.native/files/usr\" && for tool in bash python3 node npm git clang agy apt pkg; do command -v \"\$tool\" >/dev/null || exit 31; done && echo ANTIGEM_NATIVE_TOOLS_OK",
+                command = "test \"\$PREFIX\" = \"/data/data/com.antigem.shell/files/usr\" && for tool in bash python3 node npm git clang agy apt pkg; do command -v \"\$tool\" >/dev/null || exit 31; done && echo ANTIGEM_NATIVE_TOOLS_OK",
                 context = appContext
             ) else null
             if (!testRes.output.contains("GEMINI_LOCAL_TOOLS_OK") || testRes.exitCode != 0 ||
