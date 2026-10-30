@@ -2496,7 +2496,7 @@ All files created here persist inside the application.
             processBuilder.environment()["USER"] = "root"
             processBuilder.environment()["TERM"] = "xterm-256color"
             processBuilder.environment()["LANG"] = "C.UTF-8"
-            processBuilder.environment()["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            processBuilder.environment()["PATH"] = "/root/.local/bin:/root/.venvs/workspace/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             processBuilder.environment()["TMPDIR"] = "/tmp"
             processBuilder.environment()["DEBIAN_FRONTEND"] = "noninteractive"
             // Use PRoot's normal syscall handling. Forcing PROOT_NO_SECCOMP=1
