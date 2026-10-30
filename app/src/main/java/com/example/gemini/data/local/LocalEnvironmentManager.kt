@@ -891,6 +891,22 @@ object LocalEnvironmentManager {
 
         clearLogs()
         log("Starting installation: arch=$arch, source=${source.javaClass.simpleName}")
+        if (!isTermuxPackage(appContext)) {
+            if (arch != "aarch64") {
+                val error = "Full Ubuntu image currently supports only ARM64 (aarch64); detected $arch"
+                _installerState.value = LocalInstallerState.Error(errorMessage = error, canRetry = false)
+                log(error)
+                return@withContext false
+            }
+            val freeBytes = android.os.StatFs(appContext.filesDir.absolutePath).availableBytes
+            val minFreeBytes = 4L * 1024L * 1024L * 1024L
+            if (freeBytes < minFreeBytes) {
+                val error = "Full Ubuntu installation needs at least 4 GiB free to download and extract safely. Available: ${formatFileSize(freeBytes)}. No app data was deleted."
+                _installerState.value = LocalInstallerState.Error(errorMessage = error, canRetry = true)
+                log(error)
+                return@withContext false
+            }
+        }
 
         // Ensure a clean slate by clearing any previous partial/broken install
         resetEnvironment(appContext)
