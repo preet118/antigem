@@ -76,6 +76,12 @@ jobs:
             runtime-versions.txt
           retention-days: 30
           if-no-files-found: error
+      - name: Retrieve #34 APK from successful matching workflow run
+        if: github.event_name == 'workflow_dispatch' && github.workflow == 'Build AntiGem Standard APK'
+        uses: actions/download-artifact@v4
+        with:
+          name: AntiGem-Full-Ubuntu-34-APK
+          path: /tmp/antigem-full-apk
       - name: Publish pre-release for controlled on-device tests
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -85,6 +91,9 @@ jobs:
           set -euo pipefail
           tag=antigem-ubuntu24-full-v1
           args=(/tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz /tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz.sha256 package-inventory.tsv runtime-versions.txt)
+          if [ -s /tmp/antigem-full-apk/AntiGem-Full-Ubuntu-34.apk ]; then
+            args+=(/tmp/antigem-full-apk/AntiGem-Full-Ubuntu-34.apk)
+          fi
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "${args[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           else
