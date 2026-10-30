@@ -56,6 +56,15 @@ android {
             buildConfigField("int", "HUB_PORT", "1235")
             buildConfigField("int", "BROWSER_MCP_PORT", "8765")
         }
+        // Full Ubuntu ARM64 PRoot workspace, independent of both existing apps.
+        create("full") {
+            dimension = "mode"
+            applicationId = "com.antigem.full"
+            versionNameSuffix = "-ubuntu34"
+            buildConfigField("int", "BRIDGE_PORT", "1240")
+            buildConfigField("int", "HUB_PORT", "1241")
+            buildConfigField("int", "BROWSER_MCP_PORT", "8771")
+        }
     }
 
     buildTypes {
@@ -114,6 +123,9 @@ android {
         unitTests.isReturnDefaultValues = true
     }
 }
+
+// Reuse the already-tested Standard PRoot/loader assets for the isolated Full flavor.
+android.sourceSets.getByName("full").assets.srcDir(layout.projectDirectory.dir("src/standard/assets"))
 
 kotlin {
     jvmToolchain(21)
@@ -226,8 +238,10 @@ val buildAgyIdeBridge = tasks.register<Exec>("buildAgyIdeBridge") {
 
   workingDir = bridgeSourceDir.asFile
   // Standard runs its bridge inside the Ubuntu PRoot (glibc); Termux uses Android/Bionic.
-  val standardFlavor = gradle.startParameter.taskNames.any { it.contains("Standard", ignoreCase = true) }
-  environment("GOOS", if (standardFlavor) "linux" else "android")
+  val linuxProotFlavor = gradle.startParameter.taskNames.any {
+    it.contains("Standard", ignoreCase = true) || it.contains("Full", ignoreCase = true)
+}
+  environment("GOOS", if (linuxProotFlavor) "linux" else "android")
   environment("GOARCH", "arm64")
   environment("CGO_ENABLED", "0")
   commandLine("go", "build", "-ldflags=-s -w", "-o", binDir.file("agy_ide_bridge").asFile.absolutePath, "main.go")
