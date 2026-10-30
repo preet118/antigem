@@ -66,7 +66,19 @@ object LocalServerManager {
         context.assets.open("bin/$assetName").use { input ->
             val tempFile = File(binDir, "$targetFileName.tmp")
             tempFile.outputStream().use { output ->
-                input.copyTo(output)
+                val isUbuntuBackupScript = context.packageName == "com.antigem" &&
+                    targetFileName in setOf("backup_bootstrap", "backup_chats", "restore_chats", "backup_projects", "restore_projects")
+                if (isUbuntuBackupScript) {
+                    // These bundled scripts were originally authored for the com.termux prefix.
+                    // The standard flavor executes them INSIDE Ubuntu PRoot, where /usr and /root are correct.
+                    val text = input.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    val adapted = text
+                        .replace("/data/data/com.termux/files/usr", "/usr")
+                        .replace("/data/data/com.termux/files/home", "/root")
+                    output.write(adapted.toByteArray(Charsets.UTF_8))
+                } else {
+                    input.copyTo(output)
+                }
             }
             tempFile.setExecutable(true, false)
             tempFile.setReadable(true, false)
