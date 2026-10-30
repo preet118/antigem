@@ -199,7 +199,7 @@ fun FullScreenLocalToolsInstaller(
                 text = when (installerState) {
                     is LocalInstallerState.Success -> if (isTermux) "Termux-compatible shell, coreutils & AGY tools are installed and ready." else "Ubuntu ARM64 container, bash, glibc & AGY tools are ready."
                     is LocalInstallerState.Error -> "Failed to unpack rootfs. You can retry or pick a local ZIP archive."
-                    is LocalInstallerState.Idle -> if (isTermux) "Select how you would like to set up the local Termux environment for AntiGem:" else "Select how you would like to set up the Ubuntu Linux container for AntiGem:"
+                    is LocalInstallerState.Idle -> if (isTermux) "Select how you would like to set up the local Termux environment for AntiGem:" else "Install the complete Ubuntu Linux environment for coding, agents, skills and MCP:"
                     is LocalInstallerState.Discovering -> "Checking releases for the latest verified rootfs archive."
                     is LocalInstallerState.AwaitingConfirmation -> "Review details below and confirm to begin installation."
                     is LocalInstallerState.Downloading -> "Fetching rootfs archive into secure application storage."
@@ -377,7 +377,7 @@ fun FullScreenLocalToolsInstaller(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = if (isTermux) "Auto Download from GitHub" else "Ubuntu ARM64 Base (Light)",
+                                            text = if (isTermux) "Auto Download from GitHub" else "Full Ubuntu ARM64 Workspace",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -397,7 +397,7 @@ fun FullScreenLocalToolsInstaller(
                                         text = if (isTermux) {
                                             "Downloads verified Termux rootfs (~350MB) with preconfigured tools and environment."
                                         } else {
-                                            "Downloads official minimal Ubuntu ARM64 rootfs container with glibc, bash, and development tools."
+                                            "Downloads a complete Ubuntu ARM64 workspace with Python, Git, C/C++, Go, Java, Rust, Node, AGY, Claude, skills and build tools. Requires several GB of storage; Android agent/MCP compatibility must be tested."
                                         },
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -428,7 +428,7 @@ fun FullScreenLocalToolsInstaller(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = if (isTermux) "Select Local ZIP Archive" else "Custom Ubuntu Rootfs (.zip)",
+                                            text = if (isTermux) "Select Local ZIP Archive" else "Custom Ubuntu Archive (.tar.gz/.zip)",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -437,7 +437,7 @@ fun FullScreenLocalToolsInstaller(
                                             text = if (isTermux) {
                                                 "Pick an existing bootstrap backup or custom rootfs from phone storage."
                                             } else {
-                                                "Pick an existing container backup or custom rootfs (bootstraps.zip) from phone storage."
+                                                "Pick a compatible Ubuntu rootfs archive from local storage; do not import a native Termux bootstrap."
                                             },
                                             fontSize = 12.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
