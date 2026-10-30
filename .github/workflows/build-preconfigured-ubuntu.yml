@@ -1,19 +1,32 @@
-name: Build Preconfigured Ubuntu 24 ARM64
+name: Build Complete AntiGem Ubuntu 24 ARM64
 on:
+  workflow_call:
   workflow_dispatch:
-  push:
+  pull_request:
     branches:
       - fix/ubuntu-26-claude-antigravity
+  push:
+    branches:
+      - feature/ubuntu-full-workspace
     paths:
       - .github/workflows/build-preconfigured-ubuntu.yml
+      - scripts/provision_full_ubuntu.sh
+      - scripts/verify_full_ubuntu.sh
+
 permissions:
   contents: write
+
 jobs:
   rootfs:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 45
+    timeout-minutes: 120
     steps:
-      - name: Download and extract official Ubuntu Base
+      - uses: actions/checkout@v4
+      - name: Validate provisioning scripts
+        run: |
+          bash -n scripts/provision_full_ubuntu.sh
+          bash -n scripts/verify_full_ubuntu.sh
+      - name: Download and prepare Ubuntu 24.04 ARM64 base
         shell: bash
         run: |
           set -euo pipefail
@@ -21,60 +34,83 @@ jobs:
           sudo mkdir -p /tmp/antigem-ubuntu-root
           sudo tar -xzf /tmp/ubuntu-base.tar.gz -C /tmp/antigem-ubuntu-root
           sudo chmod 1777 /tmp/antigem-ubuntu-root/tmp
-          printf "nameserver 1.1.1.1\n" | sudo tee /tmp/antigem-ubuntu-root/etc/resolv.conf
+          # OpenJDK 21 post-install checks /proc. Without this, dpkg exits 100.
+          sudo mkdir -p /tmp/antigem-ubuntu-root/proc
+          sudo mount --bind /proc /tmp/antigem-ubuntu-root/proc
+          test -r /tmp/antigem-ubuntu-root/proc/self/mounts
+          printf 'nameserver 1.1.1.1\n' | sudo tee /tmp/antigem-ubuntu-root/etc/resolv.conf
           for n in null random urandom tty; do sudo cp -a "/dev/$n" "/tmp/antigem-ubuntu-root/dev/$n"; done
-      - name: Preinstall Linux requirements, AGY and compatible Claude Code
+          sudo cp scripts/provision_full_ubuntu.sh /tmp/antigem-ubuntu-root/tmp/provision_full_ubuntu.sh
+          sudo cp scripts/verify_full_ubuntu.sh /tmp/antigem-ubuntu-root/tmp/verify_full_ubuntu.sh
+      - name: Install full languages, agents and skill skeleton
         shell: bash
         run: |
           set -euo pipefail
-          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root USER=root DEBIAN_FRONTEND=noninteractive /bin/bash -ec '
-            set -euo pipefail
-            apt-get update -qq </dev/null
-            apt-get -o Dpkg::Use-Pty=0 install -y -qq curl ca-certificates procps xz-utils </dev/null
-            curl -fsSL https://nodejs.org/dist/v22.16.0/node-v22.16.0-linux-arm64.tar.xz -o /tmp/node-arm64.tar.xz
-            tar -xJf /tmp/node-arm64.tar.xz -C /usr/local --strip-components=1
-            node --version
-            npm --version
-            mkdir -p /root/.local/bin
-            curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/agy-install.sh
-            bash /tmp/agy-install.sh
-            test -x /root/.local/bin/agy
-            /root/.local/bin/agy --version
-            npm install -g --prefix /root/.local @anthropic-ai/claude-code@2.1.112
-            test -x /root/.local/bin/claude
-            /root/.local/bin/claude --version
-            apt-get clean
-            rm -rf /var/lib/apt/lists/* /root/.npm /tmp/agy-install.sh /tmp/node-arm64.tar.xz /root/.cache
-            echo "Preconfigured Ubuntu 24 ARM64: AGY and Claude verified"
-          '
-      - name: Remove CI-only files and package rootfs archive
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root USER=root DEBIAN_FRONTEND=noninteractive /bin/bash /tmp/provision_full_ubuntu.sh
+      - name: Strict CLI smoke tests and package inventory
         shell: bash
         run: |
           set -euo pipefail
-          sudo rm -f /tmp/antigem-ubuntu-root/dev/null /tmp/antigem-ubuntu-root/dev/random /tmp/antigem-ubuntu-root/dev/urandom /tmp/antigem-ubuntu-root/dev/tty
-          sudo rm -f /tmp/antigem-ubuntu-root/etc/resolv.conf
-          sudo find /tmp/antigem-ubuntu-root -type s -delete
-          sudo tar -C /tmp/antigem-ubuntu-root -czf /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz .
-          sha256sum /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz
-          ls -lh /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz
-      - name: Upload preconfigured rootfs
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root USER=root /bin/bash /tmp/verify_full_ubuntu.sh
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/dpkg-query -W > package-inventory.tsv
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root /usr/local/bin/node --version > runtime-versions.txt
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root /root/.local/bin/agy --version >> runtime-versions.txt
+          sudo chroot /tmp/antigem-ubuntu-root /usr/bin/env HOME=/root /root/.local/bin/claude --version >> runtime-versions.txt
+          wc -l package-inventory.tsv
+      - name: Sanitize and compress preconfigured rootfs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/antigem-ubuntu-root
+          # Never put the CI host proc tree into the rootfs archive.
+          sudo umount "$ROOT/proc"
+          if mountpoint -q "$ROOT/proc"; then echo "Unsafe: proc still mounted"; exit 1; fi
+          sudo rm -f "$ROOT/dev/null" "$ROOT/dev/random" "$ROOT/dev/urandom" "$ROOT/dev/tty" "$ROOT/etc/resolv.conf"
+          sudo rm -f "$ROOT/tmp/provision_full_ubuntu.sh" "$ROOT/tmp/verify_full_ubuntu.sh"
+          sudo find "$ROOT" -type s -delete
+          sudo tar -C "$ROOT" -czf /tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz .
+          (cd /tmp && sha256sum AntiGem-Ubuntu24-ARM64-Full.tar.gz) | tee /tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz.sha256
+          stat -c 'ROOTFS_ARCHIVE_BYTES=%s' /tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz
+          sudo du -sh "$ROOT"
+      - name: Upload complete rootfs candidate, checksums and package inventory
         uses: actions/upload-artifact@v4
         with:
-          name: AntiGem-Ubuntu24-ARM64-Preconfigured
-          path: /tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz
-          if-no-files-found: error
+          name: AntiGem-Ubuntu24-ARM64-Full-CANDIDATE
+          path: |
+            /tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz
+            /tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz.sha256
+            package-inventory.tsv
+            runtime-versions.txt
           retention-days: 30
+          if-no-files-found: error
+      - name: Unmount CI /proc if a prior step failed
+        if: always()
+        shell: bash
+        run: |
+          if mountpoint -q /tmp/antigem-ubuntu-root/proc; then
+            sudo umount /tmp/antigem-ubuntu-root/proc
+          fi
 
-      - name: Publish downloadable agent-ready rootfs to GitHub Releases
+      - name: Retrieve #34 APK from successful matching workflow run
+        if: github.event_name == 'workflow_dispatch' && github.workflow == 'Build AntiGem Standard APK'
+        uses: actions/download-artifact@v4
+        with:
+          name: AntiGem-Full-Ubuntu-34-APK
+          path: /tmp/antigem-full-apk
+      - name: Publish pre-release for controlled on-device tests
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="antigem-ubuntu24-agents-v1"
-          asset="/tmp/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
+          tag=antigem-ubuntu24-full-v1
+          args=(/tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz /tmp/AntiGem-Ubuntu24-ARM64-Full.tar.gz.sha256 package-inventory.tsv runtime-versions.txt)
+          if [ -s /tmp/antigem-full-apk/AntiGem-Full-Ubuntu-34.apk ]; then
+            args+=(/tmp/antigem-full-apk/AntiGem-Full-Ubuntu-34.apk)
+          fi
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$tag" "${args[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "AntiGem Ubuntu 24 ARM64 preconfigured rootfs (test)" --notes "Ubuntu 24.04.5 LTS ARM64 with official Antigravity CLI and Claude Code 2.1.112 via npm. Created without user files, credentials or projects. GitHub ARM64 chroot-tested; actual Android PRoot/AGY Hub compatibility remains unverified." --prerelease
+            gh release create "$tag" "${args[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "AntiGem Full Ubuntu ARM64 — Android testing required" --notes "Full language toolchain and AGY/Claude CLIs; chroot smoke-tested only. Android PRoot, MCP, agent login and subagents require hardware verification. No user credentials bundled." --prerelease
           fi

@@ -3,12 +3,17 @@ name: Build AntiGem Standard APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - fix/ubuntu-26-claude-antigravity
   push:
     branches:
       - fix/ubuntu-26-claude-antigravity
+      - feature/ubuntu-full-workspace
 
 permissions:
-  contents: read
+  # The called rootfs job publishes the tested image+APK as a prerelease.
+  contents: write
 
 jobs:
   build:
@@ -42,20 +47,44 @@ jobs:
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
           "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Build APK
+      - name: Validate Ubuntu tooling scripts
         run: |
+          bash -n scripts/provision_full_ubuntu.sh
+          bash -n scripts/verify_full_ubuntu.sh
+      - name: Build APK (#34 Full Ubuntu candidate for new branch)
+        run: |
+          set -euo pipefail
           chmod +x gradlew
-          ./gradlew :app:assembleStandardDebug --no-daemon
+          if [ "$GITHUB_REF" = "refs/heads/feature/ubuntu-full-workspace" ] || [ "${GITHUB_HEAD_REF:-}" = "feature/ubuntu-full-workspace" ]; then
+            ./gradlew :app:assembleFullDebug --no-daemon --stacktrace
+          else
+            ./gradlew :app:assembleStandardDebug --no-daemon --stacktrace
+          fi
 
       - name: Prepare APK
         run: |
+          set -euo pipefail
           mkdir -p output
-          cp app/build/outputs/apk/standard/debug/*.apk output/AntiGem-Standard.apk
+          if [ "$GITHUB_REF" = "refs/heads/feature/ubuntu-full-workspace" ] || [ "${GITHUB_HEAD_REF:-}" = "feature/ubuntu-full-workspace" ]; then
+            cp app/build/outputs/apk/full/debug/*.apk output/AntiGem-Full-Ubuntu-34.apk
+          else
+            cp app/build/outputs/apk/standard/debug/*.apk output/AntiGem-Standard.apk
+          fi
           cp app/src/main/assets/bin/agy_ide_bridge output/
+          sha256sum output/*
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AntiGem-Standard-Android
+          name: AntiGem-Full-Ubuntu-34-APK
           path: output/*
           if-no-files-found: error
+
+  # One manual launch of the existing #33 workflow on the full branch can build
+  # the independent APK, then build and publish the matching ARM64 rootfs.
+  full-ubuntu-rootfs:
+    if: github.ref == 'refs/heads/feature/ubuntu-full-workspace' || github.head_ref == 'feature/ubuntu-full-workspace'
+    needs: build
+    uses: ./.github/workflows/build-preconfigured-ubuntu.yml
+    permissions:
+      contents: write

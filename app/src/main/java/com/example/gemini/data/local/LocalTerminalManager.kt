@@ -146,6 +146,7 @@ class LocalPtySession(
                 val ubuntuDir = LocalEnvironmentManager.getUbuntuRootDir(context)
                 val prootBin = LocalEnvironmentManager.getProotBinaryPath(context)
                 val homeDir = LocalEnvironmentManager.getHomeDir(context)
+                LocalEnvironmentManager.getBinDir(context).mkdirs()
 
                 val prootTmpDir = File(context.filesDir, "tmp").apply {
                     mkdirs()
@@ -173,7 +174,10 @@ class LocalPtySession(
                     "--bind=/dev/urandom:/dev/random",
                     "--bind=${shmDir.absolutePath}:/dev/shm",
                     "--bind=${prootTmpDir.absolutePath}:/tmp",
-                    "--bind=${LocalEnvironmentManager.getBinDir(context).absolutePath}:/antigem/bin"
+                    "--bind=${LocalEnvironmentManager.getBinDir(context).absolutePath}:/antigem/bin",
+                    // The IDE uses absolute app-private project paths. Expose only this app\'s files.
+                    "--bind=${context.filesDir.absolutePath}:${context.filesDir.absolutePath}",
+                    "--bind=${homeDir.absolutePath}:/root/workspace"
                 )
                 for ((fakeFile, guestPath) in sysdataBindings) {
                     prootArgs.add("--bind=${fakeFile.absolutePath}:$guestPath")
@@ -204,6 +208,9 @@ class LocalPtySession(
                 } else if (File("/sdcard").exists()) {
                     prootArgs.add("--bind=/sdcard")
                 }
+                File(ubuntuDir, context.filesDir.absolutePath.removePrefix("/")).mkdirs()
+                File(ubuntuDir, "root/workspace").mkdirs()
+                File(ubuntuDir, "antigem/bin").mkdirs()
                 LocalEnvironmentManager.setupProotDistroUbuntuFixups(context, ubuntuDir)
 
                 val envWrapper = listOf(
@@ -211,7 +218,7 @@ class LocalPtySession(
                     "HOME=/root",
                     "USER=root",
                     "LOGNAME=root",
-                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                    "PATH=/root/.local/bin:/root/.venvs/workspace/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                     "TERM=xterm-256color",
                     "COLORTERM=truecolor",
                     "LANG=C.UTF-8",
@@ -236,7 +243,7 @@ class LocalPtySession(
                         "HOME=/root",
                         "USER=root",
                         "LOGNAME=root",
-                        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                        "PATH=/root/.local/bin:/root/.venvs/workspace/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                         "TERM=xterm-256color",
                         "COLORTERM=truecolor",
                         "LANG=C.UTF-8",

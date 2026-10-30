@@ -66,10 +66,10 @@ object LocalEnvironmentManager {
     const val HARDCODED_ROOTFS_ASSET = "bootrapz_2026-10-04.zip"
     const val HARDCODED_ROOTFS_SIZE_BYTES = 350 * 1024 * 1024L
 
-    const val UBUNTU_ROOTFS_URL = "https://github.com/preet118/antigem/releases/download/antigem-ubuntu24-agents-v1/AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
-    const val UBUNTU_ROOTFS_TAG = "antigem-ubuntu24-agents-v1"
-    const val UBUNTU_ROOTFS_ASSET = "AntiGem-Ubuntu24-ARM64-Preconfigured.tar.gz"
-    const val UBUNTU_ROOTFS_SIZE_BYTES = 176853266L
+    const val UBUNTU_ROOTFS_URL = "https://github.com/preet118/antigem/releases/download/antigem-ubuntu24-full-v1/AntiGem-Ubuntu24-ARM64-Full.tar.gz"
+    const val UBUNTU_ROOTFS_TAG = "antigem-ubuntu24-full-v1"
+    const val UBUNTU_ROOTFS_ASSET = "AntiGem-Ubuntu24-ARM64-Full.tar.gz"
+    const val UBUNTU_ROOTFS_SIZE_BYTES = 700 * 1024 * 1024L // display estimate until release exists
 
     private const val NOTIFICATION_CHANNEL_ID = "antigem_bootstrap_install"
     private const val NOTIFICATION_ID = 4096
@@ -891,6 +891,22 @@ object LocalEnvironmentManager {
 
         clearLogs()
         log("Starting installation: arch=$arch, source=${source.javaClass.simpleName}")
+        if (!isTermuxPackage(appContext)) {
+            if (arch != "aarch64") {
+                val error = "Full Ubuntu image currently supports only ARM64 (aarch64); detected $arch"
+                _installerState.value = LocalInstallerState.Error(errorMessage = error, canRetry = false)
+                log(error)
+                return@withContext false
+            }
+            val freeBytes = android.os.StatFs(appContext.filesDir.absolutePath).availableBytes
+            val minFreeBytes = 4L * 1024L * 1024L * 1024L
+            if (freeBytes < minFreeBytes) {
+                val error = "Full Ubuntu installation needs at least 4 GiB free to download and extract safely. Available: ${formatFileSize(freeBytes)}. No app data was deleted."
+                _installerState.value = LocalInstallerState.Error(errorMessage = error, canRetry = true)
+                log(error)
+                return@withContext false
+            }
+        }
 
         // Ensure a clean slate by clearing any previous partial/broken install
         resetEnvironment(appContext)
@@ -988,7 +1004,8 @@ object LocalEnvironmentManager {
                             }
 
                             finalDownloadedSize = tempZipFile.length()
-                            if (finalDownloadedSize >= MIN_BOOTSTRAP_SIZE_BYTES && validateArchiveIntegrity(tempZipFile)) {
+                            if (finalDownloadedSize >= MIN_BOOTSTRAP_SIZE_BYTES && validateArchiveIntegrity(tempZipFile) &&
+                                (isTermux || verifyPublishedUbuntuRootfsSha256(tempZipFile, targetUrl))) {
                                 downloadSucceeded = true
                             } else {
                                 tempZipFile.delete()
@@ -1764,8 +1781,17 @@ object LocalEnvironmentManager {
             )
             log("Verification output: ${testRes.output.trim()}")
 
-            if (!testRes.output.contains("GEMINI_LOCAL_TOOLS_OK")) {
-                val errorMsg = "Shell verification test failed: ${testRes.output}"
+            // Full Ubuntu setup must not claim success just because Bash starts.
+            val fullUbuntuCheck = if (!isTermuxPackage(appContext)) executeCommand(
+                command = "for tool in python3 pip git gcc g++ clang go javac rustc cargo node npm npx php ruby lua Rscript zip unzip jq agy claude; do command -v \"\$tool\" >/dev/null || { echo MISSING_TOOL:\$tool; exit 42; }; done; test -f /root/.claude/skills/project-check/SKILL.md && echo ANTIGEM_FULL_TOOLCHAIN_OK",
+                context = appContext,
+                timeoutSeconds = 120
+            ) else null
+            log("Full Ubuntu toolchain verification: ${fullUbuntuCheck?.output ?: "not applicable"}")
+            val bridgePackaged = LocalServerManager.hasServerScript(appContext)
+            if (!bridgePackaged || !testRes.output.contains("GEMINI_LOCAL_TOOLS_OK") || testRes.exitCode != 0 ||
+                (fullUbuntuCheck != null && (fullUbuntuCheck.exitCode != 0 || !fullUbuntuCheck.output.contains("ANTIGEM_FULL_TOOLCHAIN_OK")))) {
+                val errorMsg = "Ubuntu verification failed: ${testRes.output}; tools: ${fullUbuntuCheck?.output ?: "not applicable"}"
                 log("❌ $errorMsg")
                 cleanupFailedInstall(appContext, authPreferences)
                 updateInstallNotification(appContext, "Installation Failed", errorMsg, -2, ongoing = false, force = true)
@@ -1812,6 +1838,35 @@ object LocalEnvironmentManager {
             authPreferences.setTerminalToolEnabled(false)
         } catch (e: Exception) {
             Log.w(TAG, "Cleanup error: ${e.message}")
+        }
+    }
+
+    /** Full Ubuntu release supplies a checksum sidecar; fail closed if absent. */
+    private fun verifyPublishedUbuntuRootfsSha256(archive: File, downloadUrl: String): Boolean {
+        return try {
+            val req = Request.Builder().url("$downloadUrl.sha256").get().build()
+            val expected = httpClient.newCall(req).execute().use { response ->
+                if (!response.isSuccessful) throw IllegalStateException("Checksum HTTP ${response.code}")
+                val raw = response.body?.string()?.trim().orEmpty()
+                val first = raw.split(Regex("\\s+")).firstOrNull().orEmpty()
+                if (!first.matches(Regex("[a-fA-F0-9]{64}"))) throw IllegalStateException("Invalid SHA256 response")
+                first.lowercase()
+            }
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            FileInputStream(archive).use { input ->
+                val buffer = ByteArray(65536)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            if (actual != expected) Log.e(TAG, "Ubuntu SHA256 mismatch: expected $expected got $actual")
+            actual == expected
+        } catch (e: Exception) {
+            Log.e(TAG, "Ubuntu SHA256 verification failed: ${e.message}")
+            false
         }
     }
 
@@ -2382,6 +2437,7 @@ All files created here persist inside the application.
             val prootBin = getProotBinaryPath(context)
             val ubuntuDir = getUbuntuRootDir(context)
             val homeDir = getHomeDir(context)
+            getBinDir(context).mkdirs() // PRoot bind source exists even before the Go bridge is extracted.
             val prootTmpDir = File(context.filesDir, "tmp").apply {
                 mkdirs()
                 try { Os.chmod(absolutePath, 511) } catch (_: Exception) {}
@@ -2406,7 +2462,10 @@ All files created here persist inside the application.
                 "--bind=/sys",
                 "--bind=/dev/urandom:/dev/random",
                 "--bind=${shmDir.absolutePath}:/dev/shm",
-                "--bind=${prootTmpDir.absolutePath}:/tmp"
+                "--bind=${prootTmpDir.absolutePath}:/tmp",
+                "--bind=${getBinDir(context).absolutePath}:/antigem/bin",
+                // IDE project paths are app-private Android absolute paths, not /root paths.
+                "--bind=${context.filesDir.absolutePath}:${context.filesDir.absolutePath}"
             )
             for ((fakeFile, guestPath) in sysdataBindings) {
                 cmdList.add("--bind=${fakeFile.absolutePath}:$guestPath")
@@ -2440,6 +2499,9 @@ All files created here persist inside the application.
                 cmdList.add("-b")
                 cmdList.add("/sdcard")
             }
+            File(ubuntuDir, context.filesDir.absolutePath.removePrefix("/")).mkdirs()
+            File(ubuntuDir, "root/workspace").mkdirs()
+            File(ubuntuDir, "antigem/bin").mkdirs()
             cmdList.addAll(
                 listOf(
                     "-b", "${homeDir.absolutePath}:/root/workspace",
@@ -2452,7 +2514,7 @@ All files created here persist inside the application.
             processBuilder.environment()["USER"] = "root"
             processBuilder.environment()["TERM"] = "xterm-256color"
             processBuilder.environment()["LANG"] = "C.UTF-8"
-            processBuilder.environment()["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            processBuilder.environment()["PATH"] = "/root/.local/bin:/root/.venvs/workspace/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
             processBuilder.environment()["TMPDIR"] = "/tmp"
             processBuilder.environment()["DEBIAN_FRONTEND"] = "noninteractive"
             // Use PRoot's normal syscall handling. Forcing PROOT_NO_SECCOMP=1
@@ -2650,6 +2712,30 @@ All files created here persist inside the application.
         args: List<String> = emptyList(),
         onLogLine: (String) -> Unit
     ): LocalCommandResult = withContext(Dispatchers.IO) {
+        // Standard APK uses Ubuntu PRoot, not a native /data/data/com.termux shell.
+        if (!isTermuxPackage(context) && isUbuntuInstalled(context)) {
+            if (!scriptName.matches(Regex("[A-Za-z0-9_-]+"))) {
+                val msg = "Invalid script name"
+                withContext(Dispatchers.Main) { onLogLine(msg) }
+                return@withContext LocalCommandResult(1, msg, 0)
+            }
+            val ubuntuScriptName = if (scriptName == "backup_bootstrap") "backup_proot_ubuntu" else scriptName
+            val scriptFile = File(getBinDir(context), ubuntuScriptName)
+            if (!scriptFile.isFile) {
+                val msg = "Backup script not available in app: $ubuntuScriptName"
+                withContext(Dispatchers.Main) { onLogLine(msg) }
+                return@withContext LocalCommandResult(1, msg, 0)
+            }
+            val safeArgs = args.joinToString(" ") { arg -> "'" + arg.replace("'", "'\\''") + "'" }
+            val result = executeCommand(
+                command = "bash /antigem/bin/$ubuntuScriptName $safeArgs",
+                context = context,
+                timeoutSeconds = 3600
+            )
+            // The generic Ubuntu executor currently captures output before returning.
+            withContext(Dispatchers.Main) { result.output.lineSequence().forEach(onLogLine) }
+            return@withContext result
+        }
         val startTime = System.currentTimeMillis()
         val binDir = getBinDir(context)
         val prefixDir = getPrefixDir(context)
